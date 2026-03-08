@@ -61,6 +61,7 @@ public class CreateIntegrationHooks {
         }
 
         List<Train> trains = List.copyOf(Create.RAILWAYS.trains.values());
+        runtime.scheduleLineSyncService().syncFromSchedules(trains);
         runtime.dispatchController().preRailwayTick(level, trains);
 
         // TODO(Create integration): If upstream Create exposes train pre-departure extension hooks,

@@ -8,6 +8,7 @@ import dev.elved.createtrainsloth.dispatch.HeadwayCalculator;
 import dev.elved.createtrainsloth.dispatch.StationStateTracker;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LineRegistry;
+import dev.elved.createtrainsloth.line.ScheduleLineSyncService;
 import dev.elved.createtrainsloth.routing.AlternativePathSelector;
 import dev.elved.createtrainsloth.routing.ReservationAwarenessService;
 import dev.elved.createtrainsloth.routing.RoutePreferenceResolver;
@@ -19,6 +20,7 @@ public class TrainSlothRuntime {
     private TrainSlothSavedData savedData;
     private LineRegistry lineRegistry;
     private LineManager lineManager;
+    private ScheduleLineSyncService scheduleLineSyncService;
     private StationStateTracker stationStateTracker;
     private HeadwayCalculator headwayCalculator;
     private DispatchController dispatchController;
@@ -37,6 +39,7 @@ public class TrainSlothRuntime {
         savedData = TrainSlothSavedData.load(minecraftServer);
         lineRegistry = new LineRegistry(savedData);
         lineManager = new LineManager(lineRegistry);
+        scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry);
         stationStateTracker = new StationStateTracker();
         headwayCalculator = new HeadwayCalculator();
         debugOverlay = new DebugOverlay();
@@ -52,6 +55,7 @@ public class TrainSlothRuntime {
         savedData = null;
         lineRegistry = null;
         lineManager = null;
+        scheduleLineSyncService = null;
         stationStateTracker = null;
         headwayCalculator = null;
         dispatchController = null;
@@ -72,6 +76,10 @@ public class TrainSlothRuntime {
 
     public DispatchController dispatchController() {
         return dispatchController;
+    }
+
+    public ScheduleLineSyncService scheduleLineSyncService() {
+        return scheduleLineSyncService;
     }
 
     public AlternativePathSelector alternativePathSelector() {

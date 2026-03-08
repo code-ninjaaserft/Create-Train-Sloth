@@ -17,11 +17,12 @@ This project is an addon, not a Create fork.
 
 ### Automatic dispatch (Phase 3 first version)
 
-- Lines can be created and edited with commands.
-- Trains can be assigned to lines.
+- Lines can be created from Create schedule data automatically.
+- Trains can be assigned automatically from schedule or manually with commands.
 - Dispatch computes target headway from:
   - assigned train count
-  - observed round-trip/travel+dwell telemetry (fallback if unavailable)
+  - Create schedule prediction ticks (when available)
+  - observed round-trip/travel+dwell telemetry (fallback)
   - minimum interval
   - safety buffer
 - Dispatch uses **station hold** (schedule cooldown) as the primary control lever.
@@ -39,6 +40,24 @@ This project is an addon, not a Create fork.
   - conflict-complexity proxy
   - cooldown/hysteresis
 - If no better safe option is found, train waits.
+
+## Schedule UI Driven Setup (Create-native)
+
+You can configure lines directly inside the Create schedule item UI:
+
+1. Add normal `Destination` instructions in the schedule.
+2. Optional: add a `Change Title` instruction with metadata.
+
+Supported `Change Title` formats:
+
+- `line:<line_id>`
+- `cts:line=<line_id>;name=<display>;min_interval=200;min_dwell=100;dwell_extension=20;safety_buffer=40;resync=0.25;route_wait=60;route_cooldown=120`
+
+Notes:
+
+- Destination filters from the schedule become line station filters.
+- `TimedWaitCondition` / `ScheduledDelay` values can be adopted as line minimum dwell baseline.
+- If no `line` metadata is present, a stable line id is derived from destination filters.
 
 ## Commands
 

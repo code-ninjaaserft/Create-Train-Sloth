@@ -15,7 +15,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import net.minecraft.world.level.Level;
@@ -60,7 +59,8 @@ public class DispatchController {
             TrainLine line = optionalLine.get();
             LineRuntimeState runtimeState = lineManager.runtimeState(lineId);
             int assignedTrainCount = lineManager.countAssignedTrains(lineId);
-            int headwayTicks = headwayCalculator.calculateTargetHeadwayTicks(line, runtimeState, assignedTrainCount);
+            List<Train> activeLineTrains = lineManager.collectAssignedTrains(lineId, trains);
+            int headwayTicks = headwayCalculator.calculateTargetHeadwayTicks(line, runtimeState, assignedTrainCount, activeLineTrains);
 
             boolean releasedThisTick = false;
             for (Train train : readyTrains) {
@@ -106,13 +106,13 @@ public class DispatchController {
             StationStateTracker.StationTransition transition = stationStateTracker.observe(train, gameTick);
 
             if (transition.arrivedStationId() != null && transition.arrivedStationName() != null) {
-                if (line.stationNames().isEmpty() || line.stationNames().contains(transition.arrivedStationName().toLowerCase(Locale.ROOT))) {
+                if (matchesLineStation(line, transition.arrivedStationName())) {
                     runtimeState.recordArrival(train.id, transition.arrivedStationId(), gameTick);
                 }
             }
 
             if (transition.departedStationId() != null && transition.departedStationName() != null) {
-                if (line.stationNames().isEmpty() || line.stationNames().contains(transition.departedStationName().toLowerCase(Locale.ROOT))) {
+                if (matchesLineStation(line, transition.departedStationName())) {
                     runtimeState.recordDeparture(train.id, transition.departedStationId(), gameTick);
                     runtimeState.clearPendingDispatchIf(train.id);
                     logVerbose("Depart", train, line.id(), transition.departedStationName());
@@ -210,6 +210,10 @@ public class DispatchController {
             return;
         }
         CreateTrainSlothMod.LOGGER.info("[CreateTrainSloth][Dispatch][{}] train={} line={} {}", action, train.id, lineId, detail);
+    }
+
+    private boolean matchesLineStation(TrainLine line, String stationName) {
+        return line.matchesStationName(stationName);
     }
 
     private record DispatchDecision(boolean hold, String reason) {

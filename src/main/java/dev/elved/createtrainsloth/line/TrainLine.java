@@ -6,6 +6,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -58,10 +59,27 @@ public class TrainLine {
     }
 
     public boolean matchesStation(GlobalStation station) {
+        return matchesStationName(station.name);
+    }
+
+    public boolean matchesStationName(String stationNameRaw) {
         if (stationNames.isEmpty()) {
             return true;
         }
-        return stationNames.contains(normalizeStation(station.name));
+        String stationName = normalizeStation(stationNameRaw);
+        for (String configured : stationNames) {
+            if (configured.contains("*")) {
+                String regex = Pattern.quote(configured).replace("\\*", "\\E.*\\Q");
+                if (stationName.matches(regex)) {
+                    return true;
+                }
+                continue;
+            }
+            if (configured.equals(stationName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private String normalizeStation(String stationName) {

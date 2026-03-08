@@ -8,6 +8,7 @@ public final class TrainSlothConfig {
 
     public static final Dispatch DISPATCH = new Dispatch(BUILDER);
     public static final Routing ROUTING = new Routing(BUILDER);
+    public static final ScheduleIntegration SCHEDULE = new ScheduleIntegration(BUILDER);
     public static final Debug DEBUG = new Debug(BUILDER);
 
     public static final ModConfigSpec SPEC = BUILDER.build();
@@ -69,6 +70,23 @@ public final class TrainSlothConfig {
                 .defineInRange("maxSearchCost", 20_000, 100, 1_000_000);
             scoreImprovementThreshold = builder.comment("Required score improvement before switching away from current route.")
                 .defineInRange("scoreImprovementThreshold", 50, 0, 100_000);
+            builder.pop();
+        }
+    }
+
+    public static final class ScheduleIntegration {
+        public final ModConfigSpec.BooleanValue enableScheduleLineAutoSetup;
+        public final ModConfigSpec.BooleanValue forceScheduleLineAssignment;
+        public final ModConfigSpec.BooleanValue deriveDwellFromTimedConditions;
+
+        private ScheduleIntegration(ModConfigSpec.Builder builder) {
+            builder.push("scheduleIntegration");
+            enableScheduleLineAutoSetup = builder.comment("Derive line definitions and station filters from Create schedule entries.")
+                .define("enableScheduleLineAutoSetup", true);
+            forceScheduleLineAssignment = builder.comment("If true, schedule-derived line assignment overwrites command assignment for that train.")
+                .define("forceScheduleLineAssignment", true);
+            deriveDwellFromTimedConditions = builder.comment("Use Create timed wait conditions as minimum dwell baseline for derived lines.")
+                .define("deriveDwellFromTimedConditions", true);
             builder.pop();
         }
     }

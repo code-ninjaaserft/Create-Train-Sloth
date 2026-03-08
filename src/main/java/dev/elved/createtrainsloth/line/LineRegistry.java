@@ -57,8 +57,10 @@ public class LineRegistry {
     }
 
     public void assignTrain(UUID trainId, LineId lineId) {
-        savedData.assignments().put(trainId, lineId);
-        savedData.setDirty();
+        LineId previous = savedData.assignments().put(trainId, lineId);
+        if (!lineId.equals(previous)) {
+            savedData.setDirty();
+        }
     }
 
     public void unassignTrain(UUID trainId) {

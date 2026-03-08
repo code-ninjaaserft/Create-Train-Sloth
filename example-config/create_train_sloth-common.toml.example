@@ -32,6 +32,14 @@ maxSearchCost = 20000
 # Required score improvement before switching away from current route.
 scoreImprovementThreshold = 50
 
+[scheduleIntegration]
+# Derive line definitions and station filters from Create schedule entries.
+enableScheduleLineAutoSetup = true
+# If true, schedule-derived line assignment overwrites command assignment for that train.
+forceScheduleLineAssignment = true
+# Use Create timed wait conditions as minimum dwell baseline for derived lines.
+deriveDwellFromTimedConditions = true
+
 [debug]
 # Enable verbose server logs for dispatch and routing decisions.
 verboseLogs = true
