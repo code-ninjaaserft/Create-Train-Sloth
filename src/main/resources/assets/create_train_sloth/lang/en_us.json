@@ -1,0 +1,12 @@
+{
+  "itemGroup.create_train_sloth": "Create Train Sloth",
+  "create_train_sloth.command.root": "Create Train Sloth commands",
+  "create_train_sloth.command.line_created": "Created line %s",
+  "create_train_sloth.command.line_deleted": "Deleted line %s",
+  "create_train_sloth.command.station_added": "Added station '%s' to line %s",
+  "create_train_sloth.command.station_removed": "Removed station '%s' from line %s",
+  "create_train_sloth.command.assigned": "Assigned train %s to line %s",
+  "create_train_sloth.command.unassigned": "Removed line assignment for train %s",
+  "create_train_sloth.command.not_found": "Line %s does not exist",
+  "create_train_sloth.command.list_header": "Known lines: %s"
+}

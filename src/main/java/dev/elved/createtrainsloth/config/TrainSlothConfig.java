@@ -1,0 +1,86 @@
+package dev.elved.createtrainsloth.config;
+
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+public final class TrainSlothConfig {
+
+    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+
+    public static final Dispatch DISPATCH = new Dispatch(BUILDER);
+    public static final Routing ROUTING = new Routing(BUILDER);
+    public static final Debug DEBUG = new Debug(BUILDER);
+
+    public static final ModConfigSpec SPEC = BUILDER.build();
+
+    private TrainSlothConfig() {
+    }
+
+    public static final class Dispatch {
+        public final ModConfigSpec.BooleanValue enableAutomaticDispatch;
+        public final ModConfigSpec.IntValue minimumIntervalTicks;
+        public final ModConfigSpec.IntValue targetIntervalOverrideTicks;
+        public final ModConfigSpec.IntValue minimumDwellTicks;
+        public final ModConfigSpec.IntValue dwellExtensionTicks;
+        public final ModConfigSpec.IntValue safetyBufferTicks;
+        public final ModConfigSpec.IntValue fallbackRoundTripTicks;
+        public final ModConfigSpec.DoubleValue resynchronizationAggressiveness;
+
+        private Dispatch(ModConfigSpec.Builder builder) {
+            builder.push("dispatch");
+            enableAutomaticDispatch = builder.comment("Enable automatic line headway dispatching.")
+                .define("enableAutomaticDispatch", true);
+            minimumIntervalTicks = builder.comment("Global minimum departure spacing for trains in the same line.")
+                .defineInRange("minimumIntervalTicks", 200, 20, 20 * 60 * 30);
+            targetIntervalOverrideTicks = builder.comment("Global fixed interval override. <= 0 means dynamic from round-trip estimate.")
+                .defineInRange("targetIntervalOverrideTicks", -1, -1, 20 * 60 * 30);
+            minimumDwellTicks = builder.comment("Minimum station dwell before a dispatched departure is allowed.")
+                .defineInRange("minimumDwellTicks", 100, 0, 20 * 60 * 10);
+            dwellExtensionTicks = builder.comment("Extra dwell added by dispatch control for stabilization.")
+                .defineInRange("dwellExtensionTicks", 20, 0, 20 * 60 * 10);
+            safetyBufferTicks = builder.comment("Extra buffer applied to computed headway.")
+                .defineInRange("safetyBufferTicks", 40, 0, 20 * 60 * 10);
+            fallbackRoundTripTicks = builder.comment("Fallback round-trip estimate when no telemetry exists.")
+                .defineInRange("fallbackRoundTripTicks", 20 * 60 * 2, 20, 20 * 60 * 60);
+            resynchronizationAggressiveness = builder.comment("0..1 - how aggressively late lines are compressed back toward target headway.")
+                .defineInRange("resynchronizationAggressiveness", 0.25D, 0D, 1D);
+            builder.pop();
+        }
+    }
+
+    public static final class Routing {
+        public final ModConfigSpec.BooleanValue enableAlternativeRouting;
+        public final ModConfigSpec.IntValue replanWaitTicks;
+        public final ModConfigSpec.IntValue switchCooldownTicks;
+        public final ModConfigSpec.IntValue maxCandidatePaths;
+        public final ModConfigSpec.IntValue maxSearchCost;
+        public final ModConfigSpec.IntValue scoreImprovementThreshold;
+
+        private Routing(ModConfigSpec.Builder builder) {
+            builder.push("routing");
+            enableAlternativeRouting = builder.comment("Enable route fallback when preferred track is blocked.")
+                .define("enableAlternativeRouting", true);
+            replanWaitTicks = builder.comment("Ticks waiting for signal before alternative route selection starts.")
+                .defineInRange("replanWaitTicks", 60, 0, 20 * 60 * 5);
+            switchCooldownTicks = builder.comment("Minimum ticks between route switches per train.")
+                .defineInRange("switchCooldownTicks", 120, 0, 20 * 60 * 5);
+            maxCandidatePaths = builder.comment("Upper bound of route candidates considered per replan.")
+                .defineInRange("maxCandidatePaths", 8, 1, 64);
+            maxSearchCost = builder.comment("Max navigation cost passed to Create path search.")
+                .defineInRange("maxSearchCost", 20_000, 100, 1_000_000);
+            scoreImprovementThreshold = builder.comment("Required score improvement before switching away from current route.")
+                .defineInRange("scoreImprovementThreshold", 50, 0, 100_000);
+            builder.pop();
+        }
+    }
+
+    public static final class Debug {
+        public final ModConfigSpec.BooleanValue verboseLogs;
+
+        private Debug(ModConfigSpec.Builder builder) {
+            builder.push("debug");
+            verboseLogs = builder.comment("Enable verbose server logs for dispatch and routing decisions.")
+                .define("verboseLogs", true);
+            builder.pop();
+        }
+    }
+}

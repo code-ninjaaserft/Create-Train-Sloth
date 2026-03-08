@@ -1,0 +1,37 @@
+# Create Train Sloth common config example
+
+[dispatch]
+# Enable automatic line headway dispatching.
+enableAutomaticDispatch = true
+# Global minimum departure spacing for trains in the same line.
+minimumIntervalTicks = 200
+# Global fixed interval override. <= 0 means dynamic from round-trip estimate.
+targetIntervalOverrideTicks = -1
+# Minimum station dwell before a dispatched departure is allowed.
+minimumDwellTicks = 100
+# Extra dwell added by dispatch control for stabilization.
+dwellExtensionTicks = 20
+# Extra buffer applied to computed headway.
+safetyBufferTicks = 40
+# Fallback round-trip estimate when no telemetry exists.
+fallbackRoundTripTicks = 2400
+# 0..1 - how aggressively late lines are compressed back toward target headway.
+resynchronizationAggressiveness = 0.25
+
+[routing]
+# Enable route fallback when preferred track is blocked.
+enableAlternativeRouting = true
+# Ticks waiting for signal before alternative route selection starts.
+replanWaitTicks = 60
+# Minimum ticks between route switches per train.
+switchCooldownTicks = 120
+# Upper bound of route candidates considered per replan.
+maxCandidatePaths = 8
+# Max navigation cost passed to Create path search.
+maxSearchCost = 20000
+# Required score improvement before switching away from current route.
+scoreImprovementThreshold = 50
+
+[debug]
+# Enable verbose server logs for dispatch and routing decisions.
+verboseLogs = true
