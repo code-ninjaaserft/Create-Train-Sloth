@@ -9,9 +9,13 @@ import dev.elved.createtrainsloth.dispatch.StationStateTracker;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LineRegistry;
 import dev.elved.createtrainsloth.line.ScheduleLineSyncService;
+import dev.elved.createtrainsloth.interlocking.InterlockingControlService;
 import dev.elved.createtrainsloth.routing.AlternativePathSelector;
+import dev.elved.createtrainsloth.routing.PlatformAssignmentService;
 import dev.elved.createtrainsloth.routing.ReservationAwarenessService;
 import dev.elved.createtrainsloth.routing.RoutePreferenceResolver;
+import dev.elved.createtrainsloth.routing.ScheduleAlternativeResolver;
+import dev.elved.createtrainsloth.station.StationHubRegistry;
 import net.minecraft.server.MinecraftServer;
 
 public class TrainSlothRuntime {
@@ -19,6 +23,7 @@ public class TrainSlothRuntime {
     private MinecraftServer server;
     private TrainSlothSavedData savedData;
     private LineRegistry lineRegistry;
+    private StationHubRegistry stationHubRegistry;
     private LineManager lineManager;
     private ScheduleLineSyncService scheduleLineSyncService;
     private StationStateTracker stationStateTracker;
@@ -26,6 +31,9 @@ public class TrainSlothRuntime {
     private DispatchController dispatchController;
     private ReservationAwarenessService reservationAwarenessService;
     private RoutePreferenceResolver routePreferenceResolver;
+    private ScheduleAlternativeResolver scheduleAlternativeResolver;
+    private PlatformAssignmentService platformAssignmentService;
+    private InterlockingControlService interlockingControlService;
     private AlternativePathSelector alternativePathSelector;
     private DebugOverlay debugOverlay;
     private TrainSlothCommands commands;
@@ -38,6 +46,7 @@ public class TrainSlothRuntime {
         server = minecraftServer;
         savedData = TrainSlothSavedData.load(minecraftServer);
         lineRegistry = new LineRegistry(savedData);
+        stationHubRegistry = new StationHubRegistry(savedData);
         lineManager = new LineManager(lineRegistry);
         scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry);
         stationStateTracker = new StationStateTracker();
@@ -46,14 +55,27 @@ public class TrainSlothRuntime {
         dispatchController = new DispatchController(lineManager, stationStateTracker, headwayCalculator, debugOverlay);
         reservationAwarenessService = new ReservationAwarenessService();
         routePreferenceResolver = new RoutePreferenceResolver(reservationAwarenessService);
-        alternativePathSelector = new AlternativePathSelector(lineManager, routePreferenceResolver, reservationAwarenessService, debugOverlay);
-        commands = new TrainSlothCommands(lineRegistry, lineManager, debugOverlay);
+        scheduleAlternativeResolver = new ScheduleAlternativeResolver();
+        platformAssignmentService = new PlatformAssignmentService(lineManager, scheduleAlternativeResolver, stationHubRegistry);
+        interlockingControlService = new InterlockingControlService();
+        alternativePathSelector = new AlternativePathSelector(
+            lineManager,
+            routePreferenceResolver,
+            reservationAwarenessService,
+            scheduleAlternativeResolver,
+            platformAssignmentService,
+            interlockingControlService,
+            debugOverlay,
+            stationHubRegistry
+        );
+        commands = new TrainSlothCommands(lineRegistry, lineManager, stationHubRegistry, debugOverlay, interlockingControlService);
     }
 
     public void clear() {
         server = null;
         savedData = null;
         lineRegistry = null;
+        stationHubRegistry = null;
         lineManager = null;
         scheduleLineSyncService = null;
         stationStateTracker = null;
@@ -61,6 +83,9 @@ public class TrainSlothRuntime {
         dispatchController = null;
         reservationAwarenessService = null;
         routePreferenceResolver = null;
+        scheduleAlternativeResolver = null;
+        platformAssignmentService = null;
+        interlockingControlService = null;
         alternativePathSelector = null;
         debugOverlay = null;
         commands = null;
@@ -84,6 +109,18 @@ public class TrainSlothRuntime {
 
     public AlternativePathSelector alternativePathSelector() {
         return alternativePathSelector;
+    }
+
+    public ScheduleAlternativeResolver scheduleAlternativeResolver() {
+        return scheduleAlternativeResolver;
+    }
+
+    public PlatformAssignmentService platformAssignmentService() {
+        return platformAssignmentService;
+    }
+
+    public InterlockingControlService interlockingControlService() {
+        return interlockingControlService;
     }
 
     public TrainSlothCommands commands() {

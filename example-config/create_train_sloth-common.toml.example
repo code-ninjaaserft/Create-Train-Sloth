@@ -21,6 +21,20 @@ resynchronizationAggressiveness = 0.25
 [routing]
 # Enable route fallback when preferred track is blocked.
 enableAlternativeRouting = true
+# Enable the 'Alternative Destination' Create schedule instruction handling.
+enableScheduleAlternativeInstruction = true
+# Plan and reserve preferred platform alternatives ahead of signals.
+enableProactivePlatformPlanning = true
+# Select alternative destination entries before departure when the primary station/path is blocked.
+enablePreDepartureAlternativeSelection = true
+# Enable central interlocking override logic for routing decisions.
+enableInterlockingOverride = true
+# Require at least one placed interlocking block to activate routing override.
+requireInterlockingBlockForOverride = true
+# Use current Create schedule destination filters to discover fallback stations.
+useScheduleDestinationAlternatives = true
+# Treat stations like 'Name', 'Name 2', 'Name 3' as alternatives of one station family.
+enableNumericStationFamilyFallback = true
 # Ticks waiting for signal before alternative route selection starts.
 replanWaitTicks = 60
 # Minimum ticks between route switches per train.

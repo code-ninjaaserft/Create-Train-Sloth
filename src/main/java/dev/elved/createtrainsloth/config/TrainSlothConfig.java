@@ -50,6 +50,13 @@ public final class TrainSlothConfig {
 
     public static final class Routing {
         public final ModConfigSpec.BooleanValue enableAlternativeRouting;
+        public final ModConfigSpec.BooleanValue enableScheduleAlternativeInstruction;
+        public final ModConfigSpec.BooleanValue enableProactivePlatformPlanning;
+        public final ModConfigSpec.BooleanValue enablePreDepartureAlternativeSelection;
+        public final ModConfigSpec.BooleanValue enableInterlockingOverride;
+        public final ModConfigSpec.BooleanValue requireInterlockingBlockForOverride;
+        public final ModConfigSpec.BooleanValue useScheduleDestinationAlternatives;
+        public final ModConfigSpec.BooleanValue enableNumericStationFamilyFallback;
         public final ModConfigSpec.IntValue replanWaitTicks;
         public final ModConfigSpec.IntValue switchCooldownTicks;
         public final ModConfigSpec.IntValue maxCandidatePaths;
@@ -60,6 +67,20 @@ public final class TrainSlothConfig {
             builder.push("routing");
             enableAlternativeRouting = builder.comment("Enable route fallback when preferred track is blocked.")
                 .define("enableAlternativeRouting", true);
+            enableScheduleAlternativeInstruction = builder.comment("Enable the 'Alternative Destination' Create schedule instruction handling.")
+                .define("enableScheduleAlternativeInstruction", true);
+            enableProactivePlatformPlanning = builder.comment("Plan and reserve preferred platform alternatives ahead of signals.")
+                .define("enableProactivePlatformPlanning", true);
+            enablePreDepartureAlternativeSelection = builder.comment("Select alternative destination entries before departure when the primary station/path is blocked.")
+                .define("enablePreDepartureAlternativeSelection", true);
+            enableInterlockingOverride = builder.comment("Enable central interlocking override logic for routing decisions.")
+                .define("enableInterlockingOverride", true);
+            requireInterlockingBlockForOverride = builder.comment("Require at least one placed interlocking block to activate routing override.")
+                .define("requireInterlockingBlockForOverride", true);
+            useScheduleDestinationAlternatives = builder.comment("Use current Create schedule destination filters to discover fallback stations.")
+                .define("useScheduleDestinationAlternatives", true);
+            enableNumericStationFamilyFallback = builder.comment("Treat stations like 'Name', 'Name 2', 'Name 3' as alternatives of one station family.")
+                .define("enableNumericStationFamilyFallback", true);
             replanWaitTicks = builder.comment("Ticks waiting for signal before alternative route selection starts.")
                 .defineInRange("replanWaitTicks", 60, 0, 20 * 60 * 5);
             switchCooldownTicks = builder.comment("Minimum ticks between route switches per train.")

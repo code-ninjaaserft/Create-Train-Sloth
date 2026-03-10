@@ -5,8 +5,17 @@
   "create_train_sloth.command.line_deleted": "Deleted line %s",
   "create_train_sloth.command.station_added": "Added station '%s' to line %s",
   "create_train_sloth.command.station_removed": "Removed station '%s' from line %s",
+  "create_train_sloth.command.hub_created": "Created station hub %s",
+  "create_train_sloth.command.hub_deleted": "Deleted station hub %s",
+  "create_train_sloth.command.hub_not_found": "Station hub %s does not exist",
+  "create_train_sloth.command.hub_list_header": "Known station hubs: %s",
+  "create_train_sloth.command.hub_platform_added": "Added platform station '%s' to hub %s",
+  "create_train_sloth.command.hub_platform_removed": "Removed platform station '%s' from hub %s",
   "create_train_sloth.command.assigned": "Assigned train %s to line %s",
   "create_train_sloth.command.unassigned": "Removed line assignment for train %s",
   "create_train_sloth.command.not_found": "Line %s does not exist",
-  "create_train_sloth.command.list_header": "Known lines: %s"
+  "create_train_sloth.command.list_header": "Known lines: %s",
+  "block.create_train_sloth.interlocking_block": "Stellwerk Controller",
+  "create_train_sloth.schedule.instruction.alternative_destination": "Travel to Alternative Station",
+  "create_train_sloth.schedule.instruction.alternative_destination.short": "Alternative: %s"
 }

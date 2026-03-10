@@ -49,6 +49,27 @@ public class CreateIntegrationHooks {
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onLevelTickStart(LevelTickEvent.Pre event) {
+        Level level = event.getLevel();
+        if (level.isClientSide() || level.dimension() != Level.OVERWORLD) {
+            return;
+        }
+
+        initializeFromLevel(level);
+        if (!runtime.ready()) {
+            return;
+        }
+
+        List<Train> trains = List.copyOf(Create.RAILWAYS.trains.values());
+        runtime.interlockingControlService().captureTick(level, trains);
+        runtime.scheduleAlternativeResolver().restoreMainDestinationOverridesAfterArrival(trains);
+        runtime.scheduleAlternativeResolver().rebindMainConditionsAfterAlternativeArrival(trains);
+        runtime.scheduleAlternativeResolver().advancePastAlternativeEntries(trains);
+        runtime.platformAssignmentService().plan(level, trains);
+        runtime.alternativePathSelector().preRailwayTick(level, trains);
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onLevelTickPre(LevelTickEvent.Post event) {
         Level level = event.getLevel();
         if (level.isClientSide() || level.dimension() != Level.OVERWORLD) {

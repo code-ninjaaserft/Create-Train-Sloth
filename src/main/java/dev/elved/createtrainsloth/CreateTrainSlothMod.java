@@ -4,6 +4,8 @@ import com.mojang.logging.LogUtils;
 
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
 import dev.elved.createtrainsloth.integration.create.CreateIntegrationHooks;
+import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
+import dev.elved.createtrainsloth.schedule.TrainSlothScheduleRegistration;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -19,6 +21,8 @@ public class CreateTrainSlothMod {
     private static final TrainSlothRuntime RUNTIME = new TrainSlothRuntime();
 
     public CreateTrainSlothMod(IEventBus modEventBus, ModContainer modContainer) {
+        TrainSlothRegistries.register(modEventBus);
+        TrainSlothScheduleRegistration.registerCreateScheduleInstructions();
         modContainer.registerConfig(ModConfig.Type.COMMON, TrainSlothConfig.SPEC);
         NeoForge.EVENT_BUS.register(new CreateIntegrationHooks(RUNTIME));
     }

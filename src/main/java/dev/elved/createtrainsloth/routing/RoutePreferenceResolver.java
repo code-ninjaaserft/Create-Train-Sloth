@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class RoutePreferenceResolver {
 
@@ -22,6 +23,7 @@ public class RoutePreferenceResolver {
         TrainLine line,
         DiscoveredPath primaryPath,
         List<DiscoveredPath> candidates,
+        PlatformAssignmentService.PlannedPlatformAssignment plannedAssignment,
         AlternativePathSelector.TrainRouteState state,
         long gameTick
     ) {
@@ -32,10 +34,22 @@ public class RoutePreferenceResolver {
         Map<String, Integer> scoresBySignature = new HashMap<>();
         Map<String, DiscoveredPath> pathBySignature = new HashMap<>();
         String primarySignature = AlternativePathSelector.pathSignature(primaryPath);
+        String currentSignature = state.currentSignature() == null ? primarySignature : state.currentSignature();
+        UUID primaryDestinationId = primaryPath.destination != null ? primaryPath.destination.id : null;
 
         for (DiscoveredPath candidate : candidates) {
             String signature = AlternativePathSelector.pathSignature(candidate);
-            int score = scorePath(train, line, candidate, primarySignature, state, gameTick);
+            int score = scorePath(
+                train,
+                line,
+                candidate,
+                primarySignature,
+                primaryDestinationId,
+                plannedAssignment,
+                currentSignature,
+                state,
+                gameTick
+            );
             scoresBySignature.put(signature, score);
             pathBySignature.putIfAbsent(signature, candidate);
         }
@@ -47,7 +61,6 @@ public class RoutePreferenceResolver {
             return RouteResolution.waitOnly();
         }
 
-        String currentSignature = state.currentSignature() == null ? primarySignature : state.currentSignature();
         int currentScore = scoresBySignature.getOrDefault(currentSignature, Integer.MIN_VALUE / 4);
 
         int threshold = TrainSlothConfig.ROUTING.scoreImprovementThreshold.get();
@@ -75,6 +88,9 @@ public class RoutePreferenceResolver {
         TrainLine line,
         DiscoveredPath path,
         String primarySignature,
+        UUID primaryDestinationId,
+        PlatformAssignmentService.PlannedPlatformAssignment plannedAssignment,
+        String currentSignature,
         AlternativePathSelector.TrainRouteState state,
         long gameTick
     ) {
@@ -82,20 +98,32 @@ public class RoutePreferenceResolver {
 
         int score = 0;
         if (signature.equals(primarySignature)) {
-            score += 4000;
+            score += 500;
         }
 
         score -= (int) Math.round(Math.abs(path.distance));
-        score -= (int) Math.round(path.cost / 2D);
+        score -= (int) Math.round(path.cost);
+
+        if (path.destination != null) {
+            Train present = path.destination.getPresentTrain();
+            if (present != null && !present.id.equals(train.id)) {
+                score -= 2800;
+            }
+
+            Train imminent = path.destination.getImminentTrain();
+            if (imminent != null && !imminent.id.equals(train.id)) {
+                score -= 900;
+            }
+        }
 
         int occupied = reservationAwarenessService.countOccupiedSignals(train, path);
-        score -= occupied * 600;
+        score -= occupied * 700;
 
         int conflicts = reservationAwarenessService.estimateConflictComplexity(path);
-        score -= conflicts * 80;
+        score -= conflicts * 60;
 
         if (state.currentSignature() != null && signature.equals(state.currentSignature())) {
-            score += 250;
+            score += 180;
         }
 
         if (state.currentSignature() != null && !signature.equals(state.currentSignature())) {
@@ -103,6 +131,38 @@ public class RoutePreferenceResolver {
             int cooldown = line.settings().resolveRouteSwitchCooldownTicks();
             if (sinceLastSwitch < cooldown) {
                 score -= (int) ((cooldown - sinceLastSwitch) * 10);
+            }
+        }
+
+        // Once a train has waited long enough at a red signal, de-prioritize staying on that exact route
+        // so alternatives can be selected deterministically.
+        if (signature.equals(currentSignature) && train.navigation.waitingForSignal != null) {
+            int replanThreshold = line.settings().resolveRouteReplanWaitTicks();
+            int overWait = Math.max(0, train.navigation.ticksWaitingForSignal - replanThreshold);
+            score -= 300 + Math.min(1600, overWait * 20);
+        }
+
+        if (train.navigation.waitingForSignal != null && primaryDestinationId != null && path.destination != null) {
+            int replanThreshold = line.settings().resolveRouteReplanWaitTicks();
+            int overWait = Math.max(0, train.navigation.ticksWaitingForSignal - replanThreshold);
+
+            boolean primaryDestinationPath = primaryDestinationId.equals(path.destination.id);
+            if (primaryDestinationPath) {
+                // Main destination remains preferred while free, but once it is blocked long enough,
+                // alternatives should be able to win decisively.
+                score -= 700 + Math.min(2600, overWait * 25);
+            } else {
+                // Alternative destinations are only considered in blocked situations.
+                // Give them a rising bonus with waiting time so the train eventually reroutes.
+                score += 500 + Math.min(2400, overWait * 20);
+            }
+        }
+
+        if (plannedAssignment != null && path.destination != null) {
+            if (plannedAssignment.stationId().equals(path.destination.id)) {
+                score += 1800 + plannedAssignment.serviceClass().priorityWeight() * 10;
+            } else {
+                score -= 700;
             }
         }
 

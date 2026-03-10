@@ -70,7 +70,11 @@ public class ScheduleLineSyncService {
             boolean shouldAssign = force || assignedByScheduleBefore || currentAssignment.isEmpty();
 
             if (shouldAssign) {
-                lineRegistry.assignTrain(train.id, spec.lineId());
+                TrainServiceClass serviceClass = spec.serviceClass();
+                if (serviceClass == null) {
+                    serviceClass = currentAssignment.map(TrainLineAssignment::serviceClass).orElse(TrainServiceClass.RE);
+                }
+                lineRegistry.assignTrain(train.id, spec.lineId(), serviceClass);
                 managedAssignments.put(train.id, spec.lineId());
             }
         }
@@ -142,7 +146,8 @@ public class ScheduleLineSyncService {
             overrides = overrides.withMinimumDwellTicks(maxTimedWaitTicks);
         }
 
-        return Optional.of(new DerivedLineSpec(new LineId(lineIdValue), displayName, stationFilters, overrides));
+        TrainServiceClass serviceClass = parseServiceClass(metadata);
+        return Optional.of(new DerivedLineSpec(new LineId(lineIdValue), displayName, stationFilters, overrides, serviceClass));
     }
 
     private boolean applySettings(TrainLine line, LineSettingsOverrides overrides) {
@@ -278,6 +283,23 @@ public class ScheduleLineSyncService {
         );
     }
 
+    private TrainServiceClass parseServiceClass(Map<String, String> metadata) {
+        String value = null;
+        if (metadata.containsKey("service")) {
+            value = metadata.get("service");
+        } else if (metadata.containsKey("class")) {
+            value = metadata.get("class");
+        } else if (metadata.containsKey("train_class")) {
+            value = metadata.get("train_class");
+        }
+
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        return TrainServiceClass.fromStringOrDefault(value, TrainServiceClass.RE);
+    }
+
     private Integer parseInt(Map<String, String> metadata, String... keys) {
         for (String key : keys) {
             if (!metadata.containsKey(key)) {
@@ -307,7 +329,8 @@ public class ScheduleLineSyncService {
         LineId lineId,
         String displayName,
         Set<String> stationFilters,
-        LineSettingsOverrides settings
+        LineSettingsOverrides settings,
+        TrainServiceClass serviceClass
     ) {
     }
 

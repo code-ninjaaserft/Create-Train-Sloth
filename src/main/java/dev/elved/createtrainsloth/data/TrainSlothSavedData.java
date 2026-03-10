@@ -1,7 +1,11 @@
 package dev.elved.createtrainsloth.data;
 
 import dev.elved.createtrainsloth.line.LineId;
+import dev.elved.createtrainsloth.line.TrainLineAssignment;
+import dev.elved.createtrainsloth.line.TrainServiceClass;
 import dev.elved.createtrainsloth.line.TrainLine;
+import dev.elved.createtrainsloth.station.StationHub;
+import dev.elved.createtrainsloth.station.StationHubId;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -17,7 +21,8 @@ public class TrainSlothSavedData extends SavedData {
     private static final String DATA_NAME = "create_train_sloth";
 
     private final Map<LineId, TrainLine> lines = new LinkedHashMap<>();
-    private final Map<UUID, LineId> assignments = new LinkedHashMap<>();
+    private final Map<UUID, TrainLineAssignment> assignments = new LinkedHashMap<>();
+    private final Map<StationHubId, StationHub> stationHubs = new LinkedHashMap<>();
 
     public static SavedData.Factory<TrainSlothSavedData> factory() {
         return new SavedData.Factory<>(TrainSlothSavedData::new, TrainSlothSavedData::load);
@@ -41,7 +46,17 @@ public class TrainSlothSavedData extends SavedData {
             CompoundTag assignment = (CompoundTag) assignmentTag;
             UUID trainId = assignment.getUUID("TrainId");
             LineId lineId = new LineId(assignment.getString("LineId"));
-            data.assignments.put(trainId, lineId);
+            TrainServiceClass serviceClass = TrainServiceClass.fromStringOrDefault(
+                assignment.getString("ServiceClass"),
+                TrainServiceClass.RE
+            );
+            data.assignments.put(trainId, new TrainLineAssignment(trainId, lineId, serviceClass));
+        }
+
+        ListTag stationHubTags = tag.getList("StationHubs", Tag.TAG_COMPOUND);
+        for (Tag stationHubTag : stationHubTags) {
+            StationHub stationHub = StationHub.read((CompoundTag) stationHubTag);
+            data.stationHubs.put(stationHub.id(), stationHub);
         }
 
         return data;
@@ -56,13 +71,21 @@ public class TrainSlothSavedData extends SavedData {
         tag.put("Lines", lineTags);
 
         ListTag assignmentTags = new ListTag();
-        for (Map.Entry<UUID, LineId> assignment : assignments.entrySet()) {
+        for (Map.Entry<UUID, TrainLineAssignment> assignment : assignments.entrySet()) {
             CompoundTag entry = new CompoundTag();
-            entry.putUUID("TrainId", assignment.getKey());
-            entry.putString("LineId", assignment.getValue().value());
+            TrainLineAssignment value = assignment.getValue();
+            entry.putUUID("TrainId", value.trainId());
+            entry.putString("LineId", value.lineId().value());
+            entry.putString("ServiceClass", value.serviceClass().name());
             assignmentTags.add(entry);
         }
         tag.put("Assignments", assignmentTags);
+
+        ListTag stationHubTags = new ListTag();
+        for (StationHub stationHub : stationHubs.values()) {
+            stationHubTags.add(stationHub.write());
+        }
+        tag.put("StationHubs", stationHubTags);
 
         return tag;
     }
@@ -71,7 +94,11 @@ public class TrainSlothSavedData extends SavedData {
         return lines;
     }
 
-    public Map<UUID, LineId> assignments() {
+    public Map<UUID, TrainLineAssignment> assignments() {
         return assignments;
+    }
+
+    public Map<StationHubId, StationHub> stationHubs() {
+        return stationHubs;
     }
 }

@@ -41,6 +41,12 @@ public class LineManager {
         return lineForTrain(train.id);
     }
 
+    public TrainServiceClass serviceClassForTrain(UUID trainId) {
+        return lineRegistry.assignmentOf(trainId)
+            .map(TrainLineAssignment::serviceClass)
+            .orElse(TrainServiceClass.RE);
+    }
+
     public List<Train> collectAssignedTrains(LineId lineId, Collection<Train> trains) {
         Set<UUID> assigned = Set.copyOf(lineRegistry.trainsForLine(lineId));
         if (assigned.isEmpty()) {

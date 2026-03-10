@@ -45,8 +45,8 @@ public class LineRegistry {
         }
 
         List<UUID> staleAssignments = new ArrayList<>();
-        for (Map.Entry<UUID, LineId> entry : savedData.assignments().entrySet()) {
-            if (entry.getValue().equals(id)) {
+        for (Map.Entry<UUID, TrainLineAssignment> entry : savedData.assignments().entrySet()) {
+            if (entry.getValue().lineId().equals(id)) {
                 staleAssignments.add(entry.getKey());
             }
         }
@@ -57,8 +57,13 @@ public class LineRegistry {
     }
 
     public void assignTrain(UUID trainId, LineId lineId) {
-        LineId previous = savedData.assignments().put(trainId, lineId);
-        if (!lineId.equals(previous)) {
+        assignTrain(trainId, lineId, TrainServiceClass.RE);
+    }
+
+    public void assignTrain(UUID trainId, LineId lineId, TrainServiceClass serviceClass) {
+        TrainLineAssignment updated = new TrainLineAssignment(trainId, lineId, serviceClass);
+        TrainLineAssignment previous = savedData.assignments().put(trainId, updated);
+        if (previous == null || !previous.lineId().equals(lineId) || previous.serviceClass() != serviceClass) {
             savedData.setDirty();
         }
     }
@@ -70,17 +75,16 @@ public class LineRegistry {
     }
 
     public Optional<TrainLineAssignment> assignmentOf(UUID trainId) {
-        LineId lineId = savedData.assignments().get(trainId);
-        return lineId == null ? Optional.empty() : Optional.of(new TrainLineAssignment(trainId, lineId));
+        return Optional.ofNullable(savedData.assignments().get(trainId));
     }
 
-    public Map<UUID, LineId> assignments() {
+    public Map<UUID, TrainLineAssignment> assignments() {
         return Collections.unmodifiableMap(new HashMap<>(savedData.assignments()));
     }
 
     public List<UUID> trainsForLine(LineId lineId) {
         return savedData.assignments().entrySet().stream()
-            .filter(entry -> entry.getValue().equals(lineId))
+            .filter(entry -> entry.getValue().lineId().equals(lineId))
             .map(Map.Entry::getKey)
             .collect(Collectors.toList());
     }
