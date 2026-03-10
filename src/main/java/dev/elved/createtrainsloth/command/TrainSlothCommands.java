@@ -31,13 +31,16 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 public class TrainSlothCommands {
 
-    private final LineRegistry lineRegistry;
-    private final LineManager lineManager;
-    private final StationHubRegistry stationHubRegistry;
-    private final DebugOverlay debugOverlay;
-    private final InterlockingControlService interlockingControlService;
+    private LineRegistry lineRegistry;
+    private LineManager lineManager;
+    private StationHubRegistry stationHubRegistry;
+    private DebugOverlay debugOverlay;
+    private InterlockingControlService interlockingControlService;
 
-    public TrainSlothCommands(
+    public TrainSlothCommands() {
+    }
+
+    public void bind(
         LineRegistry lineRegistry,
         LineManager lineManager,
         StationHubRegistry stationHubRegistry,
@@ -51,10 +54,18 @@ public class TrainSlothCommands {
         this.interlockingControlService = interlockingControlService;
     }
 
+    public void clearBindings() {
+        this.lineRegistry = null;
+        this.lineManager = null;
+        this.stationHubRegistry = null;
+        this.debugOverlay = null;
+        this.interlockingControlService = null;
+    }
+
     public void register(RegisterCommandsEvent event) {
         event.getDispatcher().register(
             literal("trainsloth")
-                .requires(source -> source.hasPermission(2))
+                .requires(source -> source.hasPermission(0))
                 .then(literal("line")
                     .then(literal("create")
                         .then(argument("line_id", StringArgumentType.word())
@@ -133,7 +144,22 @@ public class TrainSlothCommands {
         );
     }
 
+    private boolean ensureRuntime(CommandSourceStack source) {
+        if (lineRegistry != null
+            && lineManager != null
+            && stationHubRegistry != null
+            && debugOverlay != null
+            && interlockingControlService != null) {
+            return true;
+        }
+        source.sendFailure(Component.literal("Create Train Sloth runtime not ready yet. Please retry in a moment."));
+        return false;
+    }
+
     private int createLine(CommandContext<CommandSourceStack> context, String lineIdRaw, String displayName) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         LineId lineId = new LineId(lineIdRaw);
         TrainLine line = lineRegistry.findLine(lineId).orElseGet(() -> lineRegistry.createLine(lineId, displayName));
         line.setDisplayName(displayName);
@@ -146,6 +172,9 @@ public class TrainSlothCommands {
     }
 
     private int deleteLine(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         LineId lineId = new LineId(StringArgumentType.getString(context, "line_id"));
         if (!lineRegistry.removeLine(lineId)) {
             context.getSource().sendFailure(Component.translatable("create_train_sloth.command.not_found", lineId.value()));
@@ -160,6 +189,9 @@ public class TrainSlothCommands {
     }
 
     private int listLines(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         String lineSummary = lineRegistry.allLines().stream()
             .map(line -> line.id().value())
             .collect(Collectors.joining(", "));
@@ -176,6 +208,9 @@ public class TrainSlothCommands {
     }
 
     private int addStation(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         LineId lineId = new LineId(StringArgumentType.getString(context, "line_id"));
         String stationName = StringArgumentType.getString(context, "station_name");
 
@@ -195,6 +230,9 @@ public class TrainSlothCommands {
     }
 
     private int removeStation(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         LineId lineId = new LineId(StringArgumentType.getString(context, "line_id"));
         String stationName = StringArgumentType.getString(context, "station_name");
 
@@ -214,6 +252,9 @@ public class TrainSlothCommands {
     }
 
     private int createHub(CommandContext<CommandSourceStack> context, String hubIdRaw, String displayName) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         StationHubId hubId = new StationHubId(hubIdRaw);
         StationHub hub = stationHubRegistry.findHub(hubId).orElseGet(() -> stationHubRegistry.createHub(hubId, displayName));
         hub.setDisplayName(displayName);
@@ -226,6 +267,9 @@ public class TrainSlothCommands {
     }
 
     private int deleteHub(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         StationHubId hubId = new StationHubId(StringArgumentType.getString(context, "hub_id"));
         if (!stationHubRegistry.removeHub(hubId)) {
             context.getSource().sendFailure(Component.translatable("create_train_sloth.command.hub_not_found", hubId.value()));
@@ -240,6 +284,9 @@ public class TrainSlothCommands {
     }
 
     private int listHubs(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         String hubSummary = stationHubRegistry.allHubs().stream()
             .map(hub -> hub.id().value() + "[" + hub.platformCount() + "]")
             .collect(Collectors.joining(", "));
@@ -256,6 +303,9 @@ public class TrainSlothCommands {
     }
 
     private int addHubPlatform(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         StationHubId hubId = new StationHubId(StringArgumentType.getString(context, "hub_id"));
         String stationName = StringArgumentType.getString(context, "station_name");
 
@@ -273,6 +323,9 @@ public class TrainSlothCommands {
     }
 
     private int removeHubPlatform(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         StationHubId hubId = new StationHubId(StringArgumentType.getString(context, "hub_id"));
         String stationName = StringArgumentType.getString(context, "station_name");
 
@@ -290,6 +343,9 @@ public class TrainSlothCommands {
     }
 
     private int setLineSetting(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         LineId lineId = new LineId(StringArgumentType.getString(context, "line_id"));
         String key = StringArgumentType.getString(context, "key");
         double value = DoubleArgumentType.getDouble(context, "value");
@@ -322,6 +378,9 @@ public class TrainSlothCommands {
     }
 
     private int assignTrain(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         UUID trainId = UuidArgument.getUuid(context, "train_id");
         LineId lineId = new LineId(StringArgumentType.getString(context, "line_id"));
 
@@ -340,6 +399,9 @@ public class TrainSlothCommands {
     }
 
     private int unassignTrain(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         UUID trainId = UuidArgument.getUuid(context, "train_id");
         lineRegistry.unassignTrain(trainId);
         context.getSource().sendSuccess(
@@ -350,6 +412,9 @@ public class TrainSlothCommands {
     }
 
     private int debugTrain(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         UUID trainId = UuidArgument.getUuid(context, "train_id");
         Train train = Create.RAILWAYS.trains.get(trainId);
 
@@ -380,6 +445,9 @@ public class TrainSlothCommands {
     }
 
     private int debugInterlocking(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         if (context.getSource().getLevel() == null) {
             context.getSource().sendFailure(Component.literal("No level context available."));
             return 0;
@@ -435,6 +503,9 @@ public class TrainSlothCommands {
     }
 
     private int setServiceClass(CommandContext<CommandSourceStack> context) {
+        if (!ensureRuntime(context.getSource())) {
+            return 0;
+        }
         UUID trainId = UuidArgument.getUuid(context, "train_id");
         String rawClass = StringArgumentType.getString(context, "class");
         TrainServiceClass serviceClass = parseServiceClass(rawClass);

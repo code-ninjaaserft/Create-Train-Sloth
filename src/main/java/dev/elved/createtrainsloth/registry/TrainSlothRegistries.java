@@ -2,14 +2,19 @@ package dev.elved.createtrainsloth.registry;
 
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.block.InterlockingBlock;
+import dev.elved.createtrainsloth.block.StationHubBlock;
 import dev.elved.createtrainsloth.block.entity.InterlockingBlockEntity;
+import dev.elved.createtrainsloth.item.StationLinkItem;
+import dev.elved.createtrainsloth.menu.StellwerkMenu;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -21,6 +26,8 @@ public final class TrainSlothRegistries {
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(CreateTrainSlothMod.MOD_ID);
     public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
         DeferredRegister.create(BuiltInRegistries.BLOCK_ENTITY_TYPE, CreateTrainSlothMod.MOD_ID);
+    public static final DeferredRegister<MenuType<?>> MENU_TYPES =
+        DeferredRegister.create(BuiltInRegistries.MENU, CreateTrainSlothMod.MOD_ID);
 
     public static final DeferredBlock<InterlockingBlock> INTERLOCKING_BLOCK = BLOCKS.registerBlock(
         "interlocking_block",
@@ -31,10 +38,31 @@ public final class TrainSlothRegistries {
     public static final DeferredItem<BlockItem> INTERLOCKING_BLOCK_ITEM =
         ITEMS.registerSimpleBlockItem(INTERLOCKING_BLOCK, new Item.Properties());
 
+    public static final DeferredBlock<StationHubBlock> STATION_HUB_BLOCK = BLOCKS.registerBlock(
+        "station_hub_block",
+        StationHubBlock::new,
+        BlockBehaviour.Properties.ofFullCopy(Blocks.COPPER_BLOCK).strength(4.0F, 6.0F)
+    );
+
+    public static final DeferredItem<BlockItem> STATION_HUB_BLOCK_ITEM =
+        ITEMS.registerSimpleBlockItem(STATION_HUB_BLOCK, new Item.Properties());
+
+    public static final DeferredItem<StationLinkItem> STATION_LINK_ITEM =
+        ITEMS.register(
+            "station_link",
+            () -> new StationLinkItem(new Item.Properties().stacksTo(1))
+        );
+
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<InterlockingBlockEntity>> INTERLOCKING_BLOCK_ENTITY =
         BLOCK_ENTITY_TYPES.register(
             "interlocking_block",
             () -> BlockEntityType.Builder.of(InterlockingBlockEntity::new, INTERLOCKING_BLOCK.get()).build(null)
+        );
+
+    public static final DeferredHolder<MenuType<?>, MenuType<StellwerkMenu>> STELLWERK_MENU =
+        MENU_TYPES.register(
+            "stellwerk_menu",
+            () -> IMenuTypeExtension.create(StellwerkMenu::new)
         );
 
     private TrainSlothRegistries() {
@@ -44,5 +72,6 @@ public final class TrainSlothRegistries {
         BLOCKS.register(modEventBus);
         ITEMS.register(modEventBus);
         BLOCK_ENTITY_TYPES.register(modEventBus);
+        MENU_TYPES.register(modEventBus);
     }
 }

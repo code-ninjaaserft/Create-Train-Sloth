@@ -107,12 +107,17 @@ public class RoutePreferenceResolver {
         if (path.destination != null) {
             Train present = path.destination.getPresentTrain();
             if (present != null && !present.id.equals(train.id)) {
-                score -= 2800;
+                score -= 1400;
             }
 
             Train imminent = path.destination.getImminentTrain();
             if (imminent != null && !imminent.id.equals(train.id)) {
-                score -= 900;
+                score -= 450;
+            }
+
+            int stationReleaseTicks = reservationAwarenessService.estimateStationReleaseTicks(train, path.destination);
+            if (stationReleaseTicks > 0) {
+                score -= 480 + Math.min(8_000, stationReleaseTicks * 6);
             }
         }
 

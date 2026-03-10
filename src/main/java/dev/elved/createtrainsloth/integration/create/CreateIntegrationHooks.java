@@ -43,9 +43,7 @@ public class CreateIntegrationHooks {
             }
         }
 
-        if (runtime.commands() != null) {
-            runtime.commands().register(event);
-        }
+        runtime.commands().register(event);
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)

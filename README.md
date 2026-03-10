@@ -85,6 +85,25 @@ Behavior:
 - Cooldown + improvement threshold prevent route flapping.
 - High-priority classes are favored in platform conflict resolution (e.g. `ICE` > `ICN` > `IC` > `RE` > `IR` > `S`).
 
+### Schedule UI Station Hubs (existing Create UI)
+
+You can now use a dedicated schedule instruction type:
+
+1. Add a schedule entry.
+2. Change instruction type to `Travel to Station Hub`.
+3. Enter the hub id (for example `bern_hbf`) as text/filter.
+
+Hub-to-platform mapping options:
+
+- Command-based:
+  - `/trainsloth hub create bern_hbf "Bern Hbf"`
+  - `/trainsloth hub platform add bern_hbf "Bern Hbf 1"`
+  - `/trainsloth hub platform add bern_hbf "Bern Hbf 2"`
+  - `/trainsloth hub platform add bern_hbf "Bern Hbf 3"`
+- Schedule metadata (Create `Change Title` instruction), example:
+  - `cts:hub=bern_hbf;hub_name=Bern Hbf;platform=Bern Hbf 1`
+  - add additional `Change Title` entries for further platforms (`platform=Bern Hbf 2`, ...)
+
 ### Interlocking Block (Routing Authority)
 
 Train Sloth now provides a dedicated block:
@@ -126,6 +145,8 @@ Root: `/trainsloth`
 - `/trainsloth unassign <train_uuid>`
 - `/trainsloth service <train_uuid> <S|IR|RE|IC|ICN|ICE>`
 - `/trainsloth debug train <train_uuid>`
+
+Note: command permission is not restricted to OP level in current dev builds (`/trainsloth` works with permission level 0).
 
 Line setting keys:
 

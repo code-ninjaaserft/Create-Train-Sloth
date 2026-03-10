@@ -8,6 +8,7 @@ import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
 import dev.elved.createtrainsloth.debug.DebugOverlay;
 import dev.elved.createtrainsloth.interlocking.InterlockingControlService;
+import dev.elved.createtrainsloth.interlocking.StellwerkControlModeService;
 import dev.elved.createtrainsloth.line.LineId;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.TrainLine;
@@ -33,6 +34,7 @@ public class AlternativePathSelector {
     private final ScheduleDestinationResolver scheduleDestinationResolver;
     private final PlatformAssignmentService platformAssignmentService;
     private final InterlockingControlService interlockingControlService;
+    private final StellwerkControlModeService stellwerkControlModeService;
     private final DebugOverlay debugOverlay;
     private final Map<UUID, TrainRouteState> stateByTrain = new HashMap<>();
 
@@ -43,6 +45,7 @@ public class AlternativePathSelector {
         ScheduleAlternativeResolver scheduleAlternativeResolver,
         PlatformAssignmentService platformAssignmentService,
         InterlockingControlService interlockingControlService,
+        StellwerkControlModeService stellwerkControlModeService,
         DebugOverlay debugOverlay,
         StationHubRegistry stationHubRegistry
     ) {
@@ -53,6 +56,7 @@ public class AlternativePathSelector {
         this.scheduleDestinationResolver = new ScheduleDestinationResolver(scheduleAlternativeResolver, stationHubRegistry);
         this.platformAssignmentService = platformAssignmentService;
         this.interlockingControlService = interlockingControlService;
+        this.stellwerkControlModeService = stellwerkControlModeService;
         this.debugOverlay = debugOverlay;
     }
 
@@ -70,6 +74,9 @@ public class AlternativePathSelector {
         ordered.sort(Comparator.comparing(train -> train.id.toString()));
 
         for (Train train : ordered) {
+            if (!stellwerkControlModeService.isStellwerkEnabled(train.id)) {
+                continue;
+            }
             if (!isPreDepartureCandidate(train)) {
                 continue;
             }
@@ -83,6 +90,7 @@ public class AlternativePathSelector {
                 platformAssignmentService.assignmentForTrain(train.id);
 
             DepartureAlternative selection = selectDepartureAlternative(
+                level,
                 train,
                 destinationContext.get(),
                 plannedAssignment.orElse(null)
@@ -126,6 +134,9 @@ public class AlternativePathSelector {
         ordered.sort(Comparator.comparing(train -> train.id.toString()));
 
         for (Train train : ordered) {
+            if (!stellwerkControlModeService.isStellwerkEnabled(train.id)) {
+                continue;
+            }
             TrainLine line = lineManager.lineForTrain(train).orElse(FALLBACK_LINE);
             Optional<ScheduleDestinationResolver.DestinationContext> destinationContext = scheduleDestinationResolver.resolve(train);
             if (destinationContext.isEmpty()) {
@@ -140,7 +151,7 @@ public class AlternativePathSelector {
                 continue;
             }
 
-            if (!isRerouteCandidate(train, line, plannedAssignment, primaryDestination)) {
+            if (!isRerouteCandidate(level, train, line, plannedAssignment, primaryDestination)) {
                 continue;
             }
 
@@ -148,7 +159,7 @@ public class AlternativePathSelector {
             boolean blocked = train.navigation.waitingForSignal != null
                 && train.navigation.ticksWaitingForSignal >= adaptiveReplanThreshold;
             blocked |= reservationAwarenessService.isPrimaryPathBlocked(train, primaryPath);
-            boolean primaryStationBlocked = isStationHardBlockedByOtherTrain(train, primaryDestination);
+            boolean primaryStationBlocked = isStationHardBlockedByOtherTrain(level, train, primaryDestination);
             blocked |= primaryStationBlocked;
 
             boolean proactiveAssignedSwitch = TrainSlothConfig.ROUTING.enableProactivePlatformPlanning.get()
@@ -160,14 +171,14 @@ public class AlternativePathSelector {
                 continue;
             }
 
-            List<DiscoveredPath> candidates = collectCandidates(train, destinationContext.get(), primaryPath);
+            List<DiscoveredPath> candidates = collectCandidates(level, train, destinationContext.get(), primaryPath);
             candidates = enforceScheduleAlternativeTargets(candidates, destinationContext.get());
             if (candidates.size() <= 1) {
                 continue;
             }
 
             if (primaryStationBlocked) {
-                DiscoveredPath forcedAlternative = selectBestNonPrimaryCandidate(train, candidates, primaryDestination.id);
+                DiscoveredPath forcedAlternative = selectBestNonPrimaryCandidate(level, train, candidates, primaryDestination.id);
                 if (forcedAlternative != null) {
                     if (forcedAlternative.destination == null) {
                         continue;
@@ -270,6 +281,7 @@ public class AlternativePathSelector {
     }
 
     private List<DiscoveredPath> collectCandidates(
+        Level level,
         Train train,
         ScheduleDestinationResolver.DestinationContext destinationContext,
         DiscoveredPath primaryPath
@@ -283,13 +295,18 @@ public class AlternativePathSelector {
             destinationContext.primaryDestination(),
             TrainSlothConfig.ROUTING.maxSearchCost.get()
         );
-        addCandidate(candidatesBySignature, dynamicPrimary);
+        if (!isStationHardBlockedByOtherTrain(level, train, destinationContext.primaryDestination())) {
+            addCandidate(candidatesBySignature, dynamicPrimary);
+        }
 
         for (GlobalStation station : destinationContext.candidateStations()) {
             if (candidatesBySignature.size() >= maxCandidates) {
                 break;
             }
             if (station.id.equals(destinationContext.primaryDestination().id)) {
+                continue;
+            }
+            if (isStationHardBlockedByOtherTrain(level, train, station)) {
                 continue;
             }
 
@@ -356,6 +373,7 @@ public class AlternativePathSelector {
     }
 
     private boolean isRerouteCandidate(
+        Level level,
         Train train,
         TrainLine line,
         Optional<PlatformAssignmentService.PlannedPlatformAssignment> plannedAssignment,
@@ -373,7 +391,7 @@ public class AlternativePathSelector {
             return false;
         }
 
-        if (isStationHardBlockedByOtherTrain(train, primaryDestination)) {
+        if (isStationHardBlockedByOtherTrain(level, train, primaryDestination)) {
             return true;
         }
 
@@ -405,6 +423,7 @@ public class AlternativePathSelector {
     }
 
     private DepartureAlternative selectDepartureAlternative(
+        Level level,
         Train train,
         ScheduleDestinationResolver.DestinationContext destinationContext,
         PlatformAssignmentService.PlannedPlatformAssignment plannedAssignment
@@ -417,15 +436,14 @@ public class AlternativePathSelector {
             Integer entryIndex = alternativeEntryByStation.get(stationId);
             GlobalStation assignedStation = stationById(destinationContext, stationId);
             if (assignedStation != null
-                && !stationId.equals(primary.id)
-                && !isStationHardBlockedByOtherTrain(train, assignedStation)) {
+                && !stationId.equals(primary.id)) {
                 return new DepartureAlternative(assignedStation, entryIndex, Integer.MIN_VALUE / 4, "planned_assignment");
             }
         }
 
         DiscoveredPath primaryPath = train.navigation.findPathTo(primary, TrainSlothConfig.ROUTING.maxSearchCost.get());
         boolean primaryBlocked = primaryPath == null
-            || isStationHardBlockedByOtherTrain(train, primary)
+            || isStationHardBlockedByOtherTrain(level, train, primary)
             || reservationAwarenessService.isPrimaryPathBlocked(train, primaryPath);
 
         if (!primaryBlocked) {
@@ -443,7 +461,7 @@ public class AlternativePathSelector {
                 continue;
             }
 
-            int score = scoreDepartureCandidate(train, station, candidatePath);
+            int score = scoreDepartureCandidate(level, train, station, candidatePath);
             if (best == null || score < best.score()) {
                 best = new DepartureAlternative(station, alternativeEntryByStation.get(station.id), score, "primary_blocked");
             }
@@ -456,7 +474,12 @@ public class AlternativePathSelector {
         return best;
     }
 
-    private DiscoveredPath selectBestNonPrimaryCandidate(Train train, List<DiscoveredPath> candidates, UUID primaryStationId) {
+    private DiscoveredPath selectBestNonPrimaryCandidate(
+        Level level,
+        Train train,
+        List<DiscoveredPath> candidates,
+        UUID primaryStationId
+    ) {
         DiscoveredPath best = null;
         int bestScore = Integer.MAX_VALUE;
 
@@ -467,11 +490,8 @@ public class AlternativePathSelector {
             if (candidate.destination.id.equals(primaryStationId)) {
                 continue;
             }
-            if (isStationHardBlockedByOtherTrain(train, candidate.destination)) {
-                continue;
-            }
 
-            int score = scoreDepartureCandidate(train, candidate.destination, candidate);
+            int score = scoreDepartureCandidate(level, train, candidate.destination, candidate);
             if (score < bestScore) {
                 best = candidate;
                 bestScore = score;
@@ -481,7 +501,7 @@ public class AlternativePathSelector {
         return best;
     }
 
-    private int scoreDepartureCandidate(Train train, GlobalStation station, DiscoveredPath path) {
+    private int scoreDepartureCandidate(Level level, Train train, GlobalStation station, DiscoveredPath path) {
         if (path == null) {
             return Integer.MAX_VALUE / 4;
         }
@@ -489,14 +509,25 @@ public class AlternativePathSelector {
         int score = (int) Math.round(path.cost + Math.abs(path.distance));
         score += reservationAwarenessService.countOccupiedSignals(train, path) * 900;
         score += reservationAwarenessService.estimateConflictComplexity(path) * 80;
-        if (isStationHardBlockedByOtherTrain(train, station)) {
-            score += 2800;
+        int stationReleaseTicks = reservationAwarenessService.estimateStationReleaseTicks(train, station);
+        if (stationReleaseTicks > 0) {
+            score += 420 + Math.min(8_000, stationReleaseTicks * 6);
+        }
+        if (isStationHardBlockedByOtherTrain(level, train, station)) {
+            score += 180;
+        }
+        if (level != null && train.graph != null && interlockingControlService.isStationLocked(level, train.graph, station)) {
+            score += 8_000;
         }
         return score;
     }
 
-    private boolean isStationHardBlockedByOtherTrain(Train self, GlobalStation station) {
+    private boolean isStationHardBlockedByOtherTrain(Level level, Train self, GlobalStation station) {
         if (station == null) {
+            return true;
+        }
+
+        if (level != null && self.graph != null && interlockingControlService.isStationLocked(level, self.graph, station)) {
             return true;
         }
 

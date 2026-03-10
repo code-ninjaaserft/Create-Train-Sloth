@@ -9,6 +9,7 @@ import dev.elved.createtrainsloth.dispatch.StationStateTracker;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LineRegistry;
 import dev.elved.createtrainsloth.line.ScheduleLineSyncService;
+import dev.elved.createtrainsloth.interlocking.StellwerkControlModeService;
 import dev.elved.createtrainsloth.interlocking.InterlockingControlService;
 import dev.elved.createtrainsloth.routing.AlternativePathSelector;
 import dev.elved.createtrainsloth.routing.PlatformAssignmentService;
@@ -34,9 +35,10 @@ public class TrainSlothRuntime {
     private ScheduleAlternativeResolver scheduleAlternativeResolver;
     private PlatformAssignmentService platformAssignmentService;
     private InterlockingControlService interlockingControlService;
+    private StellwerkControlModeService stellwerkControlModeService;
     private AlternativePathSelector alternativePathSelector;
     private DebugOverlay debugOverlay;
-    private TrainSlothCommands commands;
+    private final TrainSlothCommands commands = new TrainSlothCommands();
 
     public void initialize(MinecraftServer minecraftServer) {
         if (server == minecraftServer && ready()) {
@@ -48,7 +50,7 @@ public class TrainSlothRuntime {
         lineRegistry = new LineRegistry(savedData);
         stationHubRegistry = new StationHubRegistry(savedData);
         lineManager = new LineManager(lineRegistry);
-        scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry);
+        scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry, stationHubRegistry);
         stationStateTracker = new StationStateTracker();
         headwayCalculator = new HeadwayCalculator();
         debugOverlay = new DebugOverlay();
@@ -56,8 +58,14 @@ public class TrainSlothRuntime {
         reservationAwarenessService = new ReservationAwarenessService();
         routePreferenceResolver = new RoutePreferenceResolver(reservationAwarenessService);
         scheduleAlternativeResolver = new ScheduleAlternativeResolver();
-        platformAssignmentService = new PlatformAssignmentService(lineManager, scheduleAlternativeResolver, stationHubRegistry);
+        platformAssignmentService = new PlatformAssignmentService(
+            lineManager,
+            scheduleAlternativeResolver,
+            stationHubRegistry,
+            reservationAwarenessService
+        );
         interlockingControlService = new InterlockingControlService();
+        stellwerkControlModeService = new StellwerkControlModeService();
         alternativePathSelector = new AlternativePathSelector(
             lineManager,
             routePreferenceResolver,
@@ -65,10 +73,11 @@ public class TrainSlothRuntime {
             scheduleAlternativeResolver,
             platformAssignmentService,
             interlockingControlService,
+            stellwerkControlModeService,
             debugOverlay,
             stationHubRegistry
         );
-        commands = new TrainSlothCommands(lineRegistry, lineManager, stationHubRegistry, debugOverlay, interlockingControlService);
+        commands.bind(lineRegistry, lineManager, stationHubRegistry, debugOverlay, interlockingControlService);
     }
 
     public void clear() {
@@ -86,9 +95,10 @@ public class TrainSlothRuntime {
         scheduleAlternativeResolver = null;
         platformAssignmentService = null;
         interlockingControlService = null;
+        stellwerkControlModeService = null;
         alternativePathSelector = null;
         debugOverlay = null;
-        commands = null;
+        commands.clearBindings();
     }
 
     public boolean ready() {
@@ -121,6 +131,14 @@ public class TrainSlothRuntime {
 
     public InterlockingControlService interlockingControlService() {
         return interlockingControlService;
+    }
+
+    public StellwerkControlModeService stellwerkControlModeService() {
+        return stellwerkControlModeService;
+    }
+
+    public StationHubRegistry stationHubRegistry() {
+        return stationHubRegistry;
     }
 
     public TrainSlothCommands commands() {

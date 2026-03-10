@@ -1,14 +1,19 @@
 package dev.elved.createtrainsloth.interlocking;
 
 import com.simibubi.create.content.trains.entity.Train;
+import com.simibubi.create.content.trains.graph.TrackGraph;
+import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
+import dev.elved.createtrainsloth.interlocking.schematic.SectionIdHelper;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
@@ -18,16 +23,23 @@ public class InterlockingControlService {
 
     private static final long HEARTBEAT_TTL_TICKS = 80L;
 
-    private final Map<ResourceKey<Level>, Map<BlockPos, Long>> heartbeatByDimension = new HashMap<>();
+    private final Map<ResourceKey<Level>, Map<BlockPos, InterlockingNodeState>> statesByDimension = new HashMap<>();
     private final Map<ResourceKey<Level>, InterlockingSnapshot> latestSnapshotByDimension = new HashMap<>();
 
-    public void heartbeat(Level level, BlockPos blockPos) {
+    public void heartbeat(Level level, BlockPos blockPos, boolean autoRoutingEnabled, Set<String> lockedSections) {
         if (level == null || level.isClientSide() || blockPos == null) {
             return;
         }
 
-        heartbeatByDimension.computeIfAbsent(level.dimension(), ignored -> new HashMap<>())
-            .put(blockPos.immutable(), level.getGameTime());
+        statesByDimension.computeIfAbsent(level.dimension(), ignored -> new HashMap<>())
+            .put(
+                blockPos.immutable(),
+                new InterlockingNodeState(
+                    level.getGameTime(),
+                    autoRoutingEnabled,
+                    Set.copyOf(lockedSections)
+                )
+            );
     }
 
     public void captureTick(Level level, List<Train> trains) {
@@ -90,15 +102,69 @@ public class InterlockingControlService {
         }
 
         pruneStaleNodes(level.dimension(), level.getGameTime());
-        return activeInterlockingCount(level) > 0;
+        return activeInterlockingCount(level) > 0 && hasAnyAutoRoutingEnabled(level);
     }
 
     public int activeInterlockingCount(Level level) {
         if (level == null) {
             return 0;
         }
-        Map<BlockPos, Long> activeNodes = heartbeatByDimension.get(level.dimension());
+        Map<BlockPos, InterlockingNodeState> activeNodes = statesByDimension.get(level.dimension());
         return activeNodes == null ? 0 : activeNodes.size();
+    }
+
+    public boolean hasAnyAutoRoutingEnabled(Level level) {
+        if (level == null) {
+            return false;
+        }
+
+        Map<BlockPos, InterlockingNodeState> states = statesByDimension.get(level.dimension());
+        if (states == null || states.isEmpty()) {
+            return false;
+        }
+        for (InterlockingNodeState state : states.values()) {
+            if (state.autoRoutingEnabled()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Set<String> lockedSections(Level level) {
+        if (level == null) {
+            return Set.of();
+        }
+
+        Set<String> locked = new HashSet<>();
+        Map<BlockPos, InterlockingNodeState> states = statesByDimension.get(level.dimension());
+        if (states == null) {
+            return Set.of();
+        }
+
+        for (InterlockingNodeState state : states.values()) {
+            locked.addAll(state.lockedSections());
+        }
+        return Set.copyOf(locked);
+    }
+
+    public boolean isSectionLocked(Level level, String sectionId) {
+        if (sectionId == null || sectionId.isBlank()) {
+            return false;
+        }
+        return lockedSections(level).contains(sectionId);
+    }
+
+    public boolean isStationLocked(Level level, TrackGraph graph, GlobalStation station) {
+        if (level == null || graph == null || station == null || station.edgeLocation == null) {
+            return false;
+        }
+
+        String sectionId = SectionIdHelper.sectionId(
+            graph.id,
+            station.edgeLocation.getFirst(),
+            station.edgeLocation.getSecond()
+        );
+        return isSectionLocked(level, sectionId);
     }
 
     public Optional<InterlockingSnapshot> latestSnapshot(Level level) {
@@ -109,14 +175,14 @@ public class InterlockingControlService {
     }
 
     private void pruneStaleNodes(ResourceKey<Level> dimension, long now) {
-        Map<BlockPos, Long> nodes = heartbeatByDimension.get(dimension);
+        Map<BlockPos, InterlockingNodeState> nodes = statesByDimension.get(dimension);
         if (nodes == null) {
             return;
         }
 
-        nodes.entrySet().removeIf(entry -> now - entry.getValue() > HEARTBEAT_TTL_TICKS);
+        nodes.entrySet().removeIf(entry -> now - entry.getValue().lastHeartbeatTick() > HEARTBEAT_TTL_TICKS);
         if (nodes.isEmpty()) {
-            heartbeatByDimension.remove(dimension);
+            statesByDimension.remove(dimension);
         }
     }
 
@@ -137,5 +203,8 @@ public class InterlockingControlService {
         double distanceToDestination,
         String waitingSignal
     ) {
+    }
+
+    private record InterlockingNodeState(long lastHeartbeatTick, boolean autoRoutingEnabled, Set<String> lockedSections) {
     }
 }

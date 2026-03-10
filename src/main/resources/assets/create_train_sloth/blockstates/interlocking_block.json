@@ -1,7 +1,8 @@
 {
   "variants": {
-    "": {
-      "model": "create_train_sloth:block/interlocking_block"
-    }
+    "facing=north": { "model": "create_train_sloth:block/interlocking_block" },
+    "facing=east":  { "model": "create_train_sloth:block/interlocking_block", "y": 90 },
+    "facing=south": { "model": "create_train_sloth:block/interlocking_block", "y": 180 },
+    "facing=west":  { "model": "create_train_sloth:block/interlocking_block", "y": 270 }
   }
 }

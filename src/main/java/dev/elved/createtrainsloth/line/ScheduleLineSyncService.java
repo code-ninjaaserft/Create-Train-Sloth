@@ -9,6 +9,9 @@ import com.simibubi.create.content.trains.schedule.destination.ChangeTitleInstru
 import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
 import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
+import dev.elved.createtrainsloth.station.StationHub;
+import dev.elved.createtrainsloth.station.StationHubId;
+import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -23,10 +26,12 @@ import java.util.UUID;
 public class ScheduleLineSyncService {
 
     private final LineRegistry lineRegistry;
+    private final StationHubRegistry stationHubRegistry;
     private final Map<UUID, LineId> managedAssignments = new HashMap<>();
 
-    public ScheduleLineSyncService(LineRegistry lineRegistry) {
+    public ScheduleLineSyncService(LineRegistry lineRegistry, StationHubRegistry stationHubRegistry) {
         this.lineRegistry = lineRegistry;
+        this.stationHubRegistry = stationHubRegistry;
     }
 
     public void syncFromSchedules(List<Train> trains) {
@@ -40,6 +45,7 @@ public class ScheduleLineSyncService {
         Set<UUID> seenTrains = new LinkedHashSet<>();
         for (Train train : sorted) {
             seenTrains.add(train.id);
+            syncHubMetadataFromSchedule(train);
             Optional<DerivedLineSpec> optionalSpec = deriveLineSpec(train);
             if (optionalSpec.isEmpty()) {
                 clearManagedAssignmentIfNeeded(train.id);
@@ -148,6 +154,43 @@ public class ScheduleLineSyncService {
 
         TrainServiceClass serviceClass = parseServiceClass(metadata);
         return Optional.of(new DerivedLineSpec(new LineId(lineIdValue), displayName, stationFilters, overrides, serviceClass));
+    }
+
+    private void syncHubMetadataFromSchedule(Train train) {
+        if (train.runtime == null) {
+            return;
+        }
+
+        Schedule schedule = train.runtime.getSchedule();
+        if (schedule == null || schedule.entries == null || schedule.entries.isEmpty()) {
+            return;
+        }
+
+        for (ScheduleEntry entry : schedule.entries) {
+            if (entry == null || !(entry.instruction instanceof ChangeTitleInstruction changeTitleInstruction)) {
+                continue;
+            }
+
+            Map<String, String> metadata = parseLineMetadata(changeTitleInstruction.getScheduleTitle());
+            String hubRaw = metadata.get("hub");
+            if (hubRaw == null || hubRaw.isBlank()) {
+                continue;
+            }
+
+            StationHubId hubId = new StationHubId(sanitizeLineId(hubRaw));
+            String hubDisplayName = metadata.getOrDefault("hub_name", metadata.getOrDefault("hub_display", hubId.value()));
+            StationHub hub = stationHubRegistry.findHub(hubId).orElseGet(() -> stationHubRegistry.createHub(hubId, hubDisplayName));
+            hub.setDisplayName(hubDisplayName);
+            stationHubRegistry.markDirty();
+
+            String platform = metadata.get("platform");
+            if (platform == null || platform.isBlank()) {
+                platform = metadata.get("station");
+            }
+            if (platform != null && !platform.isBlank()) {
+                stationHubRegistry.addPlatform(hubId, platform);
+            }
+        }
     }
 
     private boolean applySettings(TrainLine line, LineSettingsOverrides overrides) {

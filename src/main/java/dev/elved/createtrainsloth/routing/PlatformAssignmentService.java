@@ -24,16 +24,19 @@ public class PlatformAssignmentService {
 
     private final LineManager lineManager;
     private final ScheduleDestinationResolver destinationResolver;
+    private final ReservationAwarenessService reservationAwarenessService;
     private final Map<UUID, PlannedPlatformAssignment> assignmentByTrain = new HashMap<>();
     private final Map<UUID, List<PlannedPlatformAssignment>> assignmentsByStation = new HashMap<>();
 
     public PlatformAssignmentService(
         LineManager lineManager,
         ScheduleAlternativeResolver scheduleAlternativeResolver,
-        StationHubRegistry stationHubRegistry
+        StationHubRegistry stationHubRegistry,
+        ReservationAwarenessService reservationAwarenessService
     ) {
         this.lineManager = lineManager;
         this.destinationResolver = new ScheduleDestinationResolver(scheduleAlternativeResolver, stationHubRegistry);
+        this.reservationAwarenessService = reservationAwarenessService;
     }
 
     public void plan(Level level, List<Train> trains) {
@@ -96,7 +99,7 @@ public class PlatformAssignmentService {
             int reserveWindow = Math.max(40, line.settings().resolveMinimumDwellTicks() + line.settings().resolveSafetyBufferTicks());
             long releaseTick = arrivalTick + reserveWindow;
             TrainServiceClass serviceClass = lineManager.serviceClassForTrain(train.id);
-            requests.add(new PlatformRequest(train, line, destinationContext.get(), serviceClass, arrivalTick, releaseTick));
+            requests.add(new PlatformRequest(train, line, destinationContext.get(), serviceClass, now, arrivalTick, releaseTick));
         }
 
         return requests;
@@ -149,14 +152,11 @@ public class PlatformAssignmentService {
             score += 120;
         }
 
-        Train present = station.getPresentTrain();
-        if (present != null && !present.id.equals(request.train().id)) {
-            score += 2600;
-        }
-
-        Train imminent = station.getImminentTrain();
-        if (imminent != null && !imminent.id.equals(request.train().id)) {
-            score += 900;
+        int releaseTicks = reservationAwarenessService.estimateStationReleaseTicks(request.train(), station);
+        if (releaseTicks > 0) {
+            long leadTimeUntilArrival = Math.max(0L, request.arrivalTick() - request.planningTick());
+            long expectedWaitAfterArrival = Math.max(0L, releaseTicks - leadTimeUntilArrival);
+            score += 480 + (int) Math.min(8_000L, expectedWaitAfterArrival * 6L + releaseTicks * 2L);
         }
 
         List<PlannedPlatformAssignment> stationAssignments = assignmentsByStation.get(station.id);
@@ -198,6 +198,7 @@ public class PlatformAssignmentService {
         TrainLine line,
         ScheduleDestinationResolver.DestinationContext destinationContext,
         TrainServiceClass serviceClass,
+        long planningTick,
         long arrivalTick,
         long releaseTick
     ) {

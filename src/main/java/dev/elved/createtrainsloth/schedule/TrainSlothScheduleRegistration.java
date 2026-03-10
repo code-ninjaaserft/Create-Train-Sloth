@@ -12,16 +12,17 @@ public final class TrainSlothScheduleRegistration {
     }
 
     public static void registerCreateScheduleInstructions() {
-        ResourceLocation id = AlternativeDestinationInstruction.ID;
+        registerInstruction(AlternativeDestinationInstruction.ID, AlternativeDestinationInstruction::new);
+        registerInstruction(HubDestinationInstruction.ID, HubDestinationInstruction::new);
+        registerInstruction(StellwerkControlInstruction.ID, StellwerkControlInstruction::new);
+    }
 
+    private static void registerInstruction(ResourceLocation id, Supplier<? extends ScheduleInstruction> factory) {
         boolean alreadyRegistered = Schedule.INSTRUCTION_TYPES.stream()
             .map(Pair::getFirst)
             .anyMatch(id::equals);
-        if (alreadyRegistered) {
-            return;
+        if (!alreadyRegistered) {
+            Schedule.INSTRUCTION_TYPES.add(Pair.of(id, factory));
         }
-
-        Supplier<? extends ScheduleInstruction> factory = AlternativeDestinationInstruction::new;
-        Schedule.INSTRUCTION_TYPES.add(Pair.of(id, factory));
     }
 }
