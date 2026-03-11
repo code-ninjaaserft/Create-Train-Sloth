@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " R ",
+    "PCP",
+    " S "
+  ],
+  "key": {
+    "R": {
+      "item": "minecraft:comparator"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "C": {
+      "item": "create:train_casing"
+    },
+    "S": {
+      "item": "minecraft:book"
+    }
+  },
+  "result": {
+    "item": "create_train_sloth:line_manager_computer",
+    "count": 1
+  }
+}

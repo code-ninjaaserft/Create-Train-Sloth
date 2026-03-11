@@ -2,6 +2,7 @@ package dev.elved.createtrainsloth.network;
 
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.block.entity.InterlockingBlockEntity;
+import dev.elved.createtrainsloth.block.entity.LineManagerComputerBlockEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -98,33 +99,84 @@ public record EditStellwerkRoutePayload(
                 return;
             }
 
-            if (!(player.level().getBlockEntity(payload.interlockingPos) instanceof InterlockingBlockEntity interlockingBlockEntity)) {
+            Object blockEntity = player.level().getBlockEntity(payload.interlockingPos);
+            if (!(blockEntity instanceof InterlockingBlockEntity) && !(blockEntity instanceof LineManagerComputerBlockEntity)) {
                 return;
             }
 
             if (payload.action == ACTION_ADD) {
-                interlockingBlockEntity.editRouteStation(payload.lineId, payload.stationName, true);
+                editRouteStation(blockEntity, payload.lineId, payload.stationName, true);
                 return;
             }
             if (payload.action == ACTION_REMOVE) {
-                interlockingBlockEntity.editRouteStation(payload.lineId, payload.stationName, false);
+                editRouteStation(blockEntity, payload.lineId, payload.stationName, false);
                 return;
             }
             if (payload.action == ACTION_MOVE) {
-                interlockingBlockEntity.moveRouteStation(payload.lineId, payload.fromIndex, payload.toIndex);
+                moveRouteStation(blockEntity, payload.lineId, payload.fromIndex, payload.toIndex);
                 return;
             }
             if (payload.action == ACTION_CREATE) {
-                interlockingBlockEntity.createRoute(payload.routeName, payload.serviceClass);
+                createRoute(blockEntity, payload.routeName, payload.serviceClass);
                 return;
             }
             if (payload.action == ACTION_UPDATE_META) {
-                interlockingBlockEntity.updateSelectedRouteMeta(payload.routeName, payload.serviceClass);
+                updateRouteMeta(blockEntity, payload.routeName, payload.serviceClass);
                 return;
             }
             if (payload.action == ACTION_DELETE_ROUTE) {
-                interlockingBlockEntity.deleteRoute(payload.lineId);
+                deleteRoute(blockEntity, payload.lineId);
             }
         });
+    }
+
+    private static void editRouteStation(Object blockEntity, String lineId, String stationName, boolean add) {
+        if (blockEntity instanceof InterlockingBlockEntity interlockingBlockEntity) {
+            interlockingBlockEntity.editRouteStation(lineId, stationName, add);
+            return;
+        }
+        if (blockEntity instanceof LineManagerComputerBlockEntity lineManagerComputerBlockEntity) {
+            lineManagerComputerBlockEntity.editRouteStation(lineId, stationName, add);
+        }
+    }
+
+    private static void moveRouteStation(Object blockEntity, String lineId, int fromIndex, int toIndex) {
+        if (blockEntity instanceof InterlockingBlockEntity interlockingBlockEntity) {
+            interlockingBlockEntity.moveRouteStation(lineId, fromIndex, toIndex);
+            return;
+        }
+        if (blockEntity instanceof LineManagerComputerBlockEntity lineManagerComputerBlockEntity) {
+            lineManagerComputerBlockEntity.moveRouteStation(lineId, fromIndex, toIndex);
+        }
+    }
+
+    private static void createRoute(Object blockEntity, String routeName, String serviceClass) {
+        if (blockEntity instanceof InterlockingBlockEntity interlockingBlockEntity) {
+            interlockingBlockEntity.createRoute(routeName, serviceClass);
+            return;
+        }
+        if (blockEntity instanceof LineManagerComputerBlockEntity lineManagerComputerBlockEntity) {
+            lineManagerComputerBlockEntity.createRoute(routeName, serviceClass);
+        }
+    }
+
+    private static void updateRouteMeta(Object blockEntity, String routeName, String serviceClass) {
+        if (blockEntity instanceof InterlockingBlockEntity interlockingBlockEntity) {
+            interlockingBlockEntity.updateSelectedRouteMeta(routeName, serviceClass);
+            return;
+        }
+        if (blockEntity instanceof LineManagerComputerBlockEntity lineManagerComputerBlockEntity) {
+            lineManagerComputerBlockEntity.updateSelectedRouteMeta(routeName, serviceClass);
+        }
+    }
+
+    private static void deleteRoute(Object blockEntity, String lineId) {
+        if (blockEntity instanceof InterlockingBlockEntity interlockingBlockEntity) {
+            interlockingBlockEntity.deleteRoute(lineId);
+            return;
+        }
+        if (blockEntity instanceof LineManagerComputerBlockEntity lineManagerComputerBlockEntity) {
+            lineManagerComputerBlockEntity.deleteRoute(lineId);
+        }
     }
 }

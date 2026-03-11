@@ -18,12 +18,14 @@ public class StationHub {
 
     private final StationHubId id;
     private String displayName;
+    private boolean depotHub;
     private final Set<String> platformStationNames;
     private final Map<String, Set<String>> linkKeysByStation;
 
     public StationHub(StationHubId id, String displayName) {
         this.id = id;
         this.displayName = displayName;
+        this.depotHub = false;
         this.platformStationNames = new LinkedHashSet<>();
         this.linkKeysByStation = new LinkedHashMap<>();
     }
@@ -38,6 +40,14 @@ public class StationHub {
 
     public void setDisplayName(String value) {
         displayName = value == null || value.isBlank() ? id.value() : value.trim();
+    }
+
+    public boolean isDepotHub() {
+        return depotHub;
+    }
+
+    public void setDepotHub(boolean depotHub) {
+        this.depotHub = depotHub;
     }
 
     public Collection<String> platformStationNames() {
@@ -127,6 +137,7 @@ public class StationHub {
         CompoundTag tag = new CompoundTag();
         tag.putString("Id", id.value());
         tag.putString("DisplayName", displayName);
+        tag.putBoolean("DepotHub", depotHub);
         ListTag platforms = new ListTag();
         for (String platform : platformStationNames) {
             platforms.add(StringTag.valueOf(platform));
@@ -152,6 +163,7 @@ public class StationHub {
         StationHubId id = new StationHubId(tag.getString("Id"));
         String displayName = tag.contains("DisplayName") ? tag.getString("DisplayName") : id.value();
         StationHub hub = new StationHub(id, displayName);
+        hub.setDepotHub(tag.contains("DepotHub", Tag.TAG_BYTE) && tag.getBoolean("DepotHub"));
 
         ListTag platformTags = tag.getList("Platforms", Tag.TAG_STRING);
         for (Tag platformTag : platformTags) {

@@ -2,8 +2,7 @@ package dev.elved.createtrainsloth.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
-import dev.elved.createtrainsloth.block.entity.StationHubBlockEntity;
-import dev.elved.createtrainsloth.item.StationLinkBlockItem;
+import dev.elved.createtrainsloth.block.entity.LineManagerComputerBlockEntity;
 import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
 import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
@@ -26,21 +25,19 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
-public class StationHubBlock extends BaseEntityBlock implements IWrenchable {
+public class LineManagerComputerBlock extends BaseEntityBlock implements IWrenchable {
 
     private static final ResourceLocation CREATE_WRENCH = ResourceLocation.fromNamespaceAndPath("create", "wrench");
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    public static final BooleanProperty DEPOT = BooleanProperty.create("depot");
-    public static final MapCodec<StationHubBlock> CODEC = simpleCodec(StationHubBlock::new);
+    public static final MapCodec<LineManagerComputerBlock> CODEC = simpleCodec(LineManagerComputerBlock::new);
 
-    public StationHubBlock(Properties properties) {
+    public LineManagerComputerBlock(Properties properties) {
         super(properties);
-        registerDefaultState(defaultBlockState().setValue(FACING, Direction.NORTH).setValue(DEPOT, false));
+        registerDefaultState(defaultBlockState().setValue(FACING, Direction.NORTH));
     }
 
     @Override
@@ -56,24 +53,28 @@ public class StationHubBlock extends BaseEntityBlock implements IWrenchable {
     @Nullable
     @Override
     public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-        return new StationHubBlockEntity(pos, state);
+        return new LineManagerComputerBlockEntity(pos, state);
     }
 
     @Nullable
     @Override
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
-        return createTickerHelper(type, TrainSlothRegistries.STATION_HUB_BLOCK_ENTITY.get(), StationHubBlockEntity::serverTick);
+        return createTickerHelper(
+            type,
+            TrainSlothRegistries.LINE_MANAGER_COMPUTER_BLOCK_ENTITY.get(),
+            LineManagerComputerBlockEntity::serverTick
+        );
     }
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) {
-        builder.add(FACING, DEPOT);
+        builder.add(FACING);
     }
 
     @Nullable
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite()).setValue(DEPOT, false);
+        return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
     }
 
     @Override
@@ -104,10 +105,6 @@ public class StationHubBlock extends BaseEntityBlock implements IWrenchable {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
-        if (stack.getItem() instanceof StationLinkBlockItem) {
-            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-        }
-
         return openMenu(level, pos, player) == InteractionResult.PASS
             ? ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION
             : ItemInteractionResult.SUCCESS;
@@ -132,8 +129,8 @@ public class StationHubBlock extends BaseEntityBlock implements IWrenchable {
             return InteractionResult.SUCCESS;
         }
 
-        if (level.getBlockEntity(pos) instanceof StationHubBlockEntity stationHubBlockEntity) {
-            player.openMenu(stationHubBlockEntity, pos);
+        if (level.getBlockEntity(pos) instanceof LineManagerComputerBlockEntity blockEntity) {
+            player.openMenu(blockEntity, pos);
             return InteractionResult.CONSUME;
         }
 

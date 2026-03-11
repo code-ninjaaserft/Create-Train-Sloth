@@ -13,6 +13,7 @@ public class DebugOverlay {
     private final Map<UUID, String> routerStagesByTrain = new HashMap<>();
     private final Map<UUID, String> routerBreakpointsByTrain = new HashMap<>();
     private final Map<UUID, String> depotActionsByTrain = new HashMap<>();
+    private final Map<UUID, String> missionByTrain = new HashMap<>();
 
     public void recordHold(UUID trainId, LineId lineId, String reason) {
         holdReasonsByTrain.put(trainId, "line=" + lineId + " reason=" + reason);
@@ -63,12 +64,17 @@ public class DebugOverlay {
         depotActionsByTrain.put(trainId, detail);
     }
 
+    public void recordMission(UUID trainId, String detail) {
+        missionByTrain.put(trainId, detail);
+    }
+
     public String debugForTrain(UUID trainId) {
         String hold = holdReasonsByTrain.getOrDefault(trainId, "no dispatch record");
         String route = routeSwitchesByTrain.getOrDefault(trainId, "no routing record");
         String router = routerStagesByTrain.getOrDefault(trainId, "no router trace");
         String breakpoint = routerBreakpointsByTrain.getOrDefault(trainId, "none");
         String depot = depotActionsByTrain.getOrDefault(trainId, "none");
-        return "dispatch={" + hold + "} routing={" + route + "} router={" + router + "} break={" + breakpoint + "} depot={" + depot + "}";
+        String mission = missionByTrain.getOrDefault(trainId, "none");
+        return "dispatch={" + hold + "} routing={" + route + "} router={" + router + "} break={" + breakpoint + "} depot={" + depot + "} mission={" + mission + "}";
     }
 }

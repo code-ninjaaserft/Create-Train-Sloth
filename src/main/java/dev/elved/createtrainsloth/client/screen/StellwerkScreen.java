@@ -60,7 +60,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
     private Button lineNextButton;
     private Button assignTrainButton;
     private Button unassignTrainButton;
-    private Button routeCreatorButton;
 
     public StellwerkScreen(StellwerkMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -139,15 +138,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
                 panY = 0D;
             }
         ));
-        routeCreatorButton = addRenderableWidget(new StellwerkStyledButton(
-            controlsX,
-            controlsY + 80,
-            58,
-            14,
-            Component.translatable("create_train_sloth.stellwerk.button.route_creator"),
-            button -> openRouteCreator()
-        ));
-
         int assignmentX = leftPos + ASSIGNMENT_X;
         int assignmentY = topPos + ASSIGNMENT_Y;
 
@@ -434,7 +424,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         lineNextButton.active = hasLines;
         assignTrainButton.active = hasLines && hasTrains;
         unassignTrainButton.active = hasTrains && !"-".equals(menu.selectedAssignmentLabel());
-        routeCreatorButton.active = true;
     }
 
     private Component autoRoutingText() {
@@ -443,13 +432,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
                 ? "create_train_sloth.stellwerk.button.auto_on"
                 : "create_train_sloth.stellwerk.button.auto_off"
         );
-    }
-
-    private void openRouteCreator() {
-        if (minecraft == null || minecraft.player == null) {
-            return;
-        }
-        minecraft.setScreen(new StellwerkRouteCreatorScreen(menu, minecraft.player.getInventory(), title));
     }
 
     private StellwerkSchematicSnapshot snapshot() {

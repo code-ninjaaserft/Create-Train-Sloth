@@ -288,7 +288,7 @@ public class TrainSlothCommands {
             return 0;
         }
         String hubSummary = stationHubRegistry.allHubs().stream()
-            .map(hub -> hub.id().value() + "[" + hub.platformCount() + "]")
+            .map(hub -> hub.id().value() + "[" + hub.platformCount() + "]" + (hub.isDepotHub() ? "{depot}" : ""))
             .collect(Collectors.joining(", "));
         if (hubSummary.isBlank()) {
             hubSummary = "<none>";

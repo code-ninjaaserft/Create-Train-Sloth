@@ -35,6 +35,7 @@ public class RoutingAuthorityService {
     private final ScheduleDestinationResolver scheduleDestinationResolver;
     private final InterlockingControlService interlockingControlService;
     private final DepotRuntimeService depotRuntimeService;
+    private final TrainMissionService trainMissionService;
     private final DebugOverlay debugOverlay;
     private long requestSequence = 0L;
 
@@ -49,6 +50,7 @@ public class RoutingAuthorityService {
         StationHubRegistry stationHubRegistry,
         InterlockingControlService interlockingControlService,
         DepotRuntimeService depotRuntimeService,
+        TrainMissionService trainMissionService,
         DebugOverlay debugOverlay
     ) {
         this.lineManager = lineManager;
@@ -65,6 +67,7 @@ public class RoutingAuthorityService {
         );
         this.interlockingControlService = interlockingControlService;
         this.depotRuntimeService = depotRuntimeService;
+        this.trainMissionService = trainMissionService;
         this.debugOverlay = debugOverlay;
     }
 
@@ -79,6 +82,9 @@ public class RoutingAuthorityService {
 
     public void onLevelTickMid(Level level, List<Train> trains) {
         scheduleLineSyncService.syncFromSchedules(trains);
+        if (trainMissionService != null) {
+            trainMissionService.tick(trains, lineManager::lineForTrain, debugOverlay);
+        }
         dispatchController.preRailwayTick(level, trains);
     }
 
@@ -115,6 +121,18 @@ public class RoutingAuthorityService {
 
         Optional<ScheduleDestinationResolver.DestinationContext> destinationContext = scheduleDestinationResolver.resolve(train);
         if (destinationContext.isEmpty()) {
+            Optional<ScheduleDestinationResolver.DestinationContext> missionContext = resolveMissionDestination(train);
+            if (missionContext.isPresent()) {
+                TrainRoutingRequest missionRequest = TrainRoutingRequest.create(
+                    request.correlationId(),
+                    request.trainId(),
+                    request.lineId(),
+                    request.currentLocation(),
+                    missionContext.get().sourceFilter(),
+                    request.requestSource() + ":mission"
+                );
+                return routeToContext(level, train, missionRequest, missionContext.get());
+            }
             return finalizeResponse(
                 train,
                 request.lineId(),
@@ -371,6 +389,9 @@ public class RoutingAuthorityService {
         }
 
         String assignedPlatform = selection.path().destination.name;
+        if (trainMissionService != null) {
+            trainMissionService.recordRouteAssigned(train, assignedPlatform, debugOverlay);
+        }
         return finalizeResponse(
             train,
             request.lineId(),
@@ -444,6 +465,17 @@ public class RoutingAuthorityService {
 
         Train imminent = station.getImminentTrain();
         return imminent != null && !imminent.id.equals(self.id);
+    }
+
+    private Optional<ScheduleDestinationResolver.DestinationContext> resolveMissionDestination(Train train) {
+        if (trainMissionService == null) {
+            return Optional.empty();
+        }
+        Optional<String> missionDestination = trainMissionService.peekMissionDestination(train.id);
+        if (missionDestination.isEmpty()) {
+            return Optional.empty();
+        }
+        return scheduleDestinationResolver.resolveForFilter(train, missionDestination.get());
     }
 
     private record RouteSelection(DiscoveredPath path, int score) {

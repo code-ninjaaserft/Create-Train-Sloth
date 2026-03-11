@@ -63,6 +63,19 @@ public class StationHubRegistry {
         return true;
     }
 
+    public boolean setDepotHub(StationHubId hubId, boolean depotHub) {
+        Optional<StationHub> hub = findHub(hubId);
+        if (hub.isEmpty()) {
+            return false;
+        }
+        if (hub.get().isDepotHub() == depotHub) {
+            return false;
+        }
+        hub.get().setDepotHub(depotHub);
+        savedData.setDirty();
+        return true;
+    }
+
     public Optional<StationHub> findHubForScheduleFilter(String filter) {
         String normalized = normalize(filter);
         if (normalized.isBlank()) {

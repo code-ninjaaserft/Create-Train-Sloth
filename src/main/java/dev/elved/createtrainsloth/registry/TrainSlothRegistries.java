@@ -2,12 +2,15 @@ package dev.elved.createtrainsloth.registry;
 
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.block.InterlockingBlock;
+import dev.elved.createtrainsloth.block.LineManagerComputerBlock;
 import dev.elved.createtrainsloth.block.StationLinkBlock;
 import dev.elved.createtrainsloth.block.StationHubBlock;
 import dev.elved.createtrainsloth.block.entity.InterlockingBlockEntity;
+import dev.elved.createtrainsloth.block.entity.LineManagerComputerBlockEntity;
 import dev.elved.createtrainsloth.block.entity.StationLinkBlockEntity;
 import dev.elved.createtrainsloth.block.entity.StationHubBlockEntity;
 import dev.elved.createtrainsloth.item.StationLinkBlockItem;
+import dev.elved.createtrainsloth.menu.LineManagerComputerMenu;
 import dev.elved.createtrainsloth.menu.StationHubMenu;
 import dev.elved.createtrainsloth.menu.StellwerkMenu;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -42,6 +45,15 @@ public final class TrainSlothRegistries {
     public static final DeferredItem<BlockItem> INTERLOCKING_BLOCK_ITEM =
         ITEMS.registerSimpleBlockItem(INTERLOCKING_BLOCK, new Item.Properties());
 
+    public static final DeferredBlock<LineManagerComputerBlock> LINE_MANAGER_COMPUTER_BLOCK = BLOCKS.registerBlock(
+        "line_manager_computer",
+        LineManagerComputerBlock::new,
+        BlockBehaviour.Properties.ofFullCopy(Blocks.IRON_BLOCK).strength(5.0F, 6.0F)
+    );
+
+    public static final DeferredItem<BlockItem> LINE_MANAGER_COMPUTER_BLOCK_ITEM =
+        ITEMS.registerSimpleBlockItem(LINE_MANAGER_COMPUTER_BLOCK, new Item.Properties());
+
     public static final DeferredBlock<StationHubBlock> STATION_HUB_BLOCK = BLOCKS.registerBlock(
         "station_hub_block",
         StationHubBlock::new,
@@ -71,6 +83,12 @@ public final class TrainSlothRegistries {
             () -> BlockEntityType.Builder.of(InterlockingBlockEntity::new, INTERLOCKING_BLOCK.get()).build(null)
         );
 
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LineManagerComputerBlockEntity>> LINE_MANAGER_COMPUTER_BLOCK_ENTITY =
+        BLOCK_ENTITY_TYPES.register(
+            "line_manager_computer",
+            () -> BlockEntityType.Builder.of(LineManagerComputerBlockEntity::new, LINE_MANAGER_COMPUTER_BLOCK.get()).build(null)
+        );
+
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<StationHubBlockEntity>> STATION_HUB_BLOCK_ENTITY =
         BLOCK_ENTITY_TYPES.register(
             "station_hub_block",
@@ -87,6 +105,12 @@ public final class TrainSlothRegistries {
         MENU_TYPES.register(
             "stellwerk_menu",
             () -> IMenuTypeExtension.create(StellwerkMenu::new)
+        );
+
+    public static final DeferredHolder<MenuType<?>, MenuType<LineManagerComputerMenu>> LINE_MANAGER_COMPUTER_MENU =
+        MENU_TYPES.register(
+            "line_manager_computer_menu",
+            () -> IMenuTypeExtension.create(LineManagerComputerMenu::new)
         );
 
     public static final DeferredHolder<MenuType<?>, MenuType<StationHubMenu>> STATION_HUB_MENU =

@@ -16,6 +16,7 @@
   "create_train_sloth.command.not_found": "Line %s does not exist",
   "create_train_sloth.command.list_header": "Known lines: %s",
   "block.create_train_sloth.interlocking_block": "Train Router",
+  "block.create_train_sloth.line_manager_computer": "Line Manager Computer",
   "block.create_train_sloth.station_hub_block": "Station Hub",
   "block.create_train_sloth.station_link": "Station Linker",
   "item.create_train_sloth.station_link": "Station Link",
@@ -26,9 +27,14 @@
   "create_train_sloth.hub.availability": "Free: %s | Soon free: %s | Blocked: %s",
   "create_train_sloth.hub.selected_station": "Selected Station",
   "create_train_sloth.hub.rename_hint": "Rename selected station and press Enter or Rename.",
+  "create_train_sloth.hub.depot_status": "Hub mode: %s",
+  "create_train_sloth.hub.mode.depot": "Depot",
+  "create_train_sloth.hub.mode.normal": "Normal",
   "create_train_sloth.hub.button.remove": "Remove",
   "create_train_sloth.hub.button.rename_hub": "Hub",
   "create_train_sloth.hub.button.rename": "Rename",
+  "create_train_sloth.hub.button.depot_on": "Depot On",
+  "create_train_sloth.hub.button.depot_off": "Depot Off",
   "create_train_sloth.station_link.hub_selected": "Station Link bound to %s",
   "create_train_sloth.station_link.no_hub": "Sneak-right-click a Station Hub with the Station Link first.",
   "create_train_sloth.station_link.station_invalid": "This block is not a valid Create track station.",
@@ -81,5 +87,7 @@
   "create_train_sloth.stellwerk.route_creator.button.delete_route": "Delete",
   "create_train_sloth.stellwerk.route_creator.button.apply": "Apply",
   "create_train_sloth.stellwerk.route_creator.button.add": "Add",
-  "create_train_sloth.stellwerk.route_creator.button.remove": "Remove"
+  "create_train_sloth.stellwerk.route_creator.button.remove": "Remove",
+  "create_train_sloth.line_manager.title": "Line Manager",
+  "create_train_sloth.line_manager.button.generate": "Generate"
 }

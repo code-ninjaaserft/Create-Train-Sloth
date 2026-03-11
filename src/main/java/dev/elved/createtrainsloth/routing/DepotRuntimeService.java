@@ -75,6 +75,7 @@ public class DepotRuntimeService {
         processRecallArrivals(trainById, depotHubs);
         List<Train> availableDepotTrains = collectAvailableDepotTrains(ordered, depotHubs);
         evaluateLineBalances(level, ordered, availableDepotTrains, depotHubs);
+        routeUnassignedTrainsToDepot(ordered, depotHubs);
     }
 
     private void evaluateLineBalances(
@@ -244,7 +245,13 @@ public class DepotRuntimeService {
             return List.of();
         }
 
-        List<StationHub> hubs = new ArrayList<>();
+        Map<String, StationHub> hubsById = new HashMap<>();
+        for (StationHub hub : stationHubRegistry.allHubs()) {
+            if (hub.isDepotHub()) {
+                hubsById.put(hub.id().value(), hub);
+            }
+        }
+
         for (String rawId : TrainSlothConfig.ROUTING.depotHubIds.get()) {
             if (rawId == null || rawId.isBlank()) {
                 continue;
@@ -252,10 +259,11 @@ public class DepotRuntimeService {
 
             String depotId = rawId.trim().toLowerCase(Locale.ROOT);
             try {
-                stationHubRegistry.findHub(new StationHubId(depotId)).ifPresent(hubs::add);
+                stationHubRegistry.findHub(new StationHubId(depotId)).ifPresent(hub -> hubsById.put(hub.id().value(), hub));
             } catch (IllegalArgumentException ignored) {
             }
         }
+        List<StationHub> hubs = new ArrayList<>(hubsById.values());
         hubs.sort(Comparator.comparing(hub -> hub.id().value()));
         return hubs;
     }
@@ -282,6 +290,41 @@ public class DepotRuntimeService {
         }
         if (TrainSlothConfig.DEBUG.verboseLogs.get()) {
             CreateTrainSlothMod.LOGGER.info("[CreateTrainSloth][Depot] train={} {}", train.id, detail);
+        }
+    }
+
+    private void routeUnassignedTrainsToDepot(List<Train> trains, List<StationHub> depotHubs) {
+        if (depotHubs == null || depotHubs.isEmpty()) {
+            return;
+        }
+
+        for (Train train : trains) {
+            if (train == null || train.graph == null) {
+                continue;
+            }
+            if (lineRegistry.assignmentOf(train.id).isPresent()) {
+                continue;
+            }
+            if (train.runtime == null || train.runtime.state != ScheduleRuntime.State.PRE_TRANSIT) {
+                continue;
+            }
+            if (train.navigation.destination != null) {
+                continue;
+            }
+
+            GlobalStation current = train.getCurrentStation();
+            if (current != null && matchesAnyHub(current, depotHubs)) {
+                continue;
+            }
+
+            DiscoveredPath pathToDepot = findPathToDepot(train, depotHubs);
+            if (pathToDepot == null || pathToDepot.destination == null) {
+                continue;
+            }
+            if (train.navigation.startNavigation(pathToDepot) < 0D) {
+                continue;
+            }
+            recordDepotAction(train, "UNASSIGNED_TO_DEPOT destination=" + pathToDepot.destination.name);
         }
     }
 }

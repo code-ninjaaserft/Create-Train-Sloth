@@ -17,6 +17,7 @@ public class StationHubMenu extends AbstractContainerMenu {
     public static final int BUTTON_PREVIOUS_STATION = 0;
     public static final int BUTTON_NEXT_STATION = 1;
     public static final int BUTTON_REMOVE_STATION = 2;
+    public static final int BUTTON_TOGGLE_DEPOT = 3;
 
     private final BlockPos blockPos;
     private final Level level;
@@ -53,6 +54,7 @@ public class StationHubMenu extends AbstractContainerMenu {
                     case 2 -> StationHubMenu.this.blockEntity.syncedFreePlatforms();
                     case 3 -> StationHubMenu.this.blockEntity.syncedSoonFreePlatforms();
                     case 4 -> StationHubMenu.this.blockEntity.syncedBlockedPlatforms();
+                    case 5 -> StationHubMenu.this.blockEntity.syncedDepotHub() ? 1 : 0;
                     default -> 0;
                 };
             }
@@ -63,7 +65,7 @@ public class StationHubMenu extends AbstractContainerMenu {
 
             @Override
             public int getCount() {
-                return 5;
+                return 6;
             }
         };
         addDataSlots(data);
@@ -106,6 +108,9 @@ public class StationHubMenu extends AbstractContainerMenu {
         if (id == BUTTON_REMOVE_STATION) {
             return blockEntity.removeSelectedPlatform();
         }
+        if (id == BUTTON_TOGGLE_DEPOT) {
+            return blockEntity.toggleDepotHub();
+        }
 
         return false;
     }
@@ -147,6 +152,10 @@ public class StationHubMenu extends AbstractContainerMenu {
 
     public int blockedPlatforms() {
         return data.get(4);
+    }
+
+    public boolean isDepotHub() {
+        return data.get(5) > 0;
     }
 
     @Nullable

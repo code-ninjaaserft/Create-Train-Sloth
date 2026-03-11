@@ -1,6 +1,7 @@
 package dev.elved.createtrainsloth.block.entity;
 
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
+import dev.elved.createtrainsloth.block.StationHubBlock;
 import dev.elved.createtrainsloth.interlocking.schematic.StellwerkSectionState;
 import dev.elved.createtrainsloth.menu.StationHubMenu;
 import dev.elved.createtrainsloth.block.StationLinkBlock;
@@ -44,6 +45,7 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
     private static final String TAG_FREE_COUNT = "FreeCount";
     private static final String TAG_SOON_FREE_COUNT = "SoonFreeCount";
     private static final String TAG_BLOCKED_COUNT = "BlockedCount";
+    private static final String TAG_DEPOT_HUB = "DepotHub";
 
     private final List<String> syncedPlatforms = new ArrayList<>();
     private String syncedHubName = "";
@@ -51,6 +53,7 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
     private int syncedFreePlatforms = 0;
     private int syncedSoonFreePlatforms = 0;
     private int syncedBlockedPlatforms = 0;
+    private boolean syncedDepotHub = false;
     private long lastSyncTick = Long.MIN_VALUE;
 
     public StationHubBlockEntity(BlockPos pos, BlockState blockState) {
@@ -100,6 +103,10 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
 
     public int syncedBlockedPlatforms() {
         return syncedBlockedPlatforms;
+    }
+
+    public boolean syncedDepotHub() {
+        return syncedDepotHub;
     }
 
     public String selectedPlatformName() {
@@ -219,6 +226,25 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
         return true;
     }
 
+    public boolean toggleDepotHub() {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+
+        StationHubRegistry registry = CreateTrainSlothMod.runtime().stationHubRegistry();
+        if (registry == null) {
+            return false;
+        }
+
+        if (!registry.setDepotHub(hubId(), !syncedDepotHub)) {
+            return false;
+        }
+
+        refreshHubData(level, true);
+        setChangedAndSync();
+        return true;
+    }
+
     public StationHubId hubId() {
         if (level == null) {
             return new StationHubId("hub_unknown");
@@ -247,12 +273,14 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
                 || !syncedHubName.isBlank()
                 || syncedFreePlatforms != 0
                 || syncedSoonFreePlatforms != 0
-                || syncedBlockedPlatforms != 0;
+                || syncedBlockedPlatforms != 0
+                || syncedDepotHub;
             syncedPlatforms.clear();
             syncedHubName = "";
             syncedFreePlatforms = 0;
             syncedSoonFreePlatforms = 0;
             syncedBlockedPlatforms = 0;
+            syncedDepotHub = false;
             if (clampSelection()) {
                 changed = true;
             }
@@ -265,6 +293,7 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
         List<String> updatedPlatforms = new ArrayList<>(hub.platformStationNames());
         updatedPlatforms.sort(Comparator.naturalOrder());
         String updatedHubName = hub.displayName();
+        boolean updatedDepotHub = hub.isDepotHub();
         int updatedFree = 0;
         int updatedSoonFree = 0;
         int updatedBlocked = 0;
@@ -283,7 +312,8 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
             || !syncedHubName.equals(updatedHubName)
             || syncedFreePlatforms != updatedFree
             || syncedSoonFreePlatforms != updatedSoonFree
-            || syncedBlockedPlatforms != updatedBlocked;
+            || syncedBlockedPlatforms != updatedBlocked
+            || syncedDepotHub != updatedDepotHub;
         if (changed) {
             syncedPlatforms.clear();
             syncedPlatforms.addAll(updatedPlatforms);
@@ -291,11 +321,14 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
             syncedFreePlatforms = updatedFree;
             syncedSoonFreePlatforms = updatedSoonFree;
             syncedBlockedPlatforms = updatedBlocked;
+            syncedDepotHub = updatedDepotHub;
         }
 
         if (clampSelection()) {
             changed = true;
         }
+
+        applyDepotVisual(level, updatedDepotHub);
 
         return changed;
     }
@@ -315,6 +348,20 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
         if (level != null && !level.isClientSide()) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
         }
+    }
+
+    private void applyDepotVisual(Level level, boolean depotHub) {
+        if (level == null || level.isClientSide()) {
+            return;
+        }
+        BlockState state = level.getBlockState(worldPosition);
+        if (!(state.getBlock() instanceof StationHubBlock) || !state.hasProperty(StationHubBlock.DEPOT)) {
+            return;
+        }
+        if (state.getValue(StationHubBlock.DEPOT) == depotHub) {
+            return;
+        }
+        level.setBlock(worldPosition, state.setValue(StationHubBlock.DEPOT, depotHub), 3);
     }
 
     private void destroyLinkedStationLinks(Set<String> linkKeys) {
@@ -384,6 +431,7 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
         tag.putInt(TAG_FREE_COUNT, syncedFreePlatforms);
         tag.putInt(TAG_SOON_FREE_COUNT, syncedSoonFreePlatforms);
         tag.putInt(TAG_BLOCKED_COUNT, syncedBlockedPlatforms);
+        tag.putBoolean(TAG_DEPOT_HUB, syncedDepotHub);
     }
 
     private void readSyncData(CompoundTag tag) {
@@ -397,6 +445,7 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
         syncedFreePlatforms = tag.getInt(TAG_FREE_COUNT);
         syncedSoonFreePlatforms = tag.getInt(TAG_SOON_FREE_COUNT);
         syncedBlockedPlatforms = tag.getInt(TAG_BLOCKED_COUNT);
+        syncedDepotHub = tag.contains(TAG_DEPOT_HUB, Tag.TAG_BYTE) && tag.getBoolean(TAG_DEPOT_HUB);
         clampSelection();
     }
 }

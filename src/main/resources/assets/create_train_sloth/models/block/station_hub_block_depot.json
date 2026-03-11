@@ -1,0 +1,10 @@
+{
+  "parent": "create_train_sloth:block/station_hub_block",
+  "textures": {
+    "particle": "create_train_sloth:block/station_hub_side",
+    "front": "minecraft:block/emerald_block",
+    "side": "create_train_sloth:block/station_hub_side",
+    "top": "minecraft:block/emerald_block",
+    "bottom": "create_train_sloth:block/station_hub_bottom"
+  }
+}

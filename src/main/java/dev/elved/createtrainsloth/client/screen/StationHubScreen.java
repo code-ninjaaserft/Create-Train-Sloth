@@ -35,6 +35,7 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
     private Button removeButton;
     private Button renameButton;
     private Button renameHubButton;
+    private Button depotToggleButton;
     private String lastSelectedPlatform = "-";
     private String lastHubName = "-";
 
@@ -63,6 +64,15 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
             16,
             Component.translatable("create_train_sloth.hub.button.rename_hub"),
             button -> renameHub()
+        ));
+
+        depotToggleButton = addRenderableWidget(new HubStyledButton(
+            contentLeft + 170,
+            topPos + 50,
+            42,
+            16,
+            depotToggleText(),
+            button -> sendMenuButton(StationHubMenu.BUTTON_TOGGLE_DEPOT)
         ));
 
         previousButton = addRenderableWidget(new HubStyledButton(
@@ -126,6 +136,7 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
             lastHubName = hubName;
         }
 
+        depotToggleButton.setMessage(depotToggleText());
         updateButtonState();
     }
 
@@ -176,6 +187,17 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
         );
         graphics.drawString(font, trimToWidth(menu.selectedPlatformName(), 208), 12, 88, 0xF6ECD4, false);
         graphics.drawString(font, Component.translatable("create_train_sloth.hub.rename_hint"), 12, 112, 0xD7CEB8, false);
+        graphics.drawString(
+            font,
+            Component.translatable(
+                "create_train_sloth.hub.depot_status",
+                Component.translatable(menu.isDepotHub() ? "create_train_sloth.hub.mode.depot" : "create_train_sloth.hub.mode.normal")
+            ),
+            12,
+            100,
+            menu.isDepotHub() ? 0x9CF788 : 0xD7CEB8,
+            false
+        );
     }
 
     @Override
@@ -249,6 +271,15 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
             && !renameBox.getValue().trim().isBlank()
             && !renameBox.getValue().trim().equals(menu.selectedPlatformName());
         renameHubButton.active = !hubNameBox.getValue().trim().isBlank() && !hubNameBox.getValue().trim().equals(menu.hubName());
+        depotToggleButton.active = true;
+    }
+
+    private Component depotToggleText() {
+        return Component.translatable(
+            menu.isDepotHub()
+                ? "create_train_sloth.hub.button.depot_on"
+                : "create_train_sloth.hub.button.depot_off"
+        );
     }
 
     private String trimToWidth(String value, int maxWidth) {

@@ -19,6 +19,7 @@ import dev.elved.createtrainsloth.routing.ReservationAwarenessService;
 import dev.elved.createtrainsloth.routing.RoutingAuthorityService;
 import dev.elved.createtrainsloth.routing.RoutePreferenceResolver;
 import dev.elved.createtrainsloth.routing.ScheduleAlternativeResolver;
+import dev.elved.createtrainsloth.routing.TrainMissionService;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
 import net.minecraft.server.MinecraftServer;
 
@@ -42,6 +43,7 @@ public class TrainSlothRuntime {
     private StellwerkControlModeService stellwerkControlModeService;
     private AlternativePathSelector alternativePathSelector;
     private DepotRuntimeService depotRuntimeService;
+    private TrainMissionService trainMissionService;
     private RoutingAuthorityService routingAuthorityService;
     private DebugOverlay debugOverlay;
     private final TrainSlothCommands commands = new TrainSlothCommands();
@@ -97,6 +99,7 @@ public class TrainSlothRuntime {
             stationHubRegistry,
             debugOverlay
         );
+        trainMissionService = new TrainMissionService();
         routingAuthorityService = new RoutingAuthorityService(
             lineManager,
             scheduleLineSyncService,
@@ -108,6 +111,7 @@ public class TrainSlothRuntime {
             stationHubRegistry,
             interlockingControlService,
             depotRuntimeService,
+            trainMissionService,
             debugOverlay
         );
         commands.bind(lineRegistry, lineManager, stationHubRegistry, debugOverlay, interlockingControlService);
@@ -132,6 +136,7 @@ public class TrainSlothRuntime {
         stellwerkControlModeService = null;
         alternativePathSelector = null;
         depotRuntimeService = null;
+        trainMissionService = null;
         routingAuthorityService = null;
         debugOverlay = null;
         commands.clearBindings();
