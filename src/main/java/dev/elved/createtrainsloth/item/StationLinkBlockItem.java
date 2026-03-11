@@ -4,6 +4,7 @@ import com.simibubi.create.content.trains.station.StationBlock;
 import com.simibubi.create.content.trains.station.StationBlockEntity;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.block.StationHubBlock;
+import dev.elved.createtrainsloth.block.entity.StationHubBlockEntity;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubId;
 import dev.elved.createtrainsloth.station.StationHubLocator;
@@ -18,21 +19,22 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.Item;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import org.jetbrains.annotations.NotNull;
 
-public class StationLinkItem extends Item {
+public class StationLinkBlockItem extends BlockItem {
 
     private static final String TAG_HUB_POS = "HubPos";
     private static final String TAG_HUB_DIMENSION = "HubDimension";
 
-    public StationLinkItem(Properties properties) {
-        super(properties);
+    public StationLinkBlockItem(Block block, Properties properties) {
+        super(block, properties);
     }
 
     @Override
@@ -46,21 +48,18 @@ public class StationLinkItem extends Item {
         BlockPos clickedPos = context.getClickedPos();
         Player player = context.getPlayer();
         ItemStack stack = context.getItemInHand();
+        Block clickedBlock = level.getBlockState(clickedPos).getBlock();
 
         if (player == null) {
             return InteractionResult.FAIL;
         }
 
-        if (player.isShiftKeyDown() && hasHubBinding(stack)) {
-            if (level.isClientSide) {
-                return InteractionResult.SUCCESS;
-            }
-            clearHubBinding(stack);
-            player.displayClientMessage(Component.translatable("create_train_sloth.station_link.cleared"), true);
-            return InteractionResult.SUCCESS;
+        InteractionResult placeResult = super.useOn(context);
+        if (placeResult.consumesAction()) {
+            return placeResult;
         }
 
-        if (level.getBlockState(clickedPos).getBlock() instanceof StationHubBlock) {
+        if (clickedBlock instanceof StationHubBlock) {
             if (level.isClientSide) {
                 return InteractionResult.SUCCESS;
             }
@@ -73,87 +72,99 @@ public class StationLinkItem extends Item {
             return InteractionResult.SUCCESS;
         }
 
-        if (!(level.getBlockState(clickedPos).getBlock() instanceof StationBlock)) {
-            return InteractionResult.PASS;
-        }
+        if (clickedBlock instanceof StationBlock) {
+            if (level.isClientSide) {
+                return InteractionResult.SUCCESS;
+            }
 
-        if (level.isClientSide) {
+            if (!hasHubBinding(stack)) {
+                player.displayClientMessage(
+                    Component.translatable("create_train_sloth.station_link.no_hub")
+                        .withStyle(ChatFormatting.RED),
+                    true
+                );
+                return InteractionResult.SUCCESS;
+            }
+
+            if (!(level.getBlockEntity(clickedPos) instanceof StationBlockEntity stationBlockEntity)) {
+                player.displayClientMessage(
+                    Component.translatable("create_train_sloth.station_link.station_invalid")
+                        .withStyle(ChatFormatting.RED),
+                    true
+                );
+                return InteractionResult.SUCCESS;
+            }
+
+            if (stationBlockEntity.getStation() == null || stationBlockEntity.getStation().name == null) {
+                player.displayClientMessage(
+                    Component.translatable("create_train_sloth.station_link.station_unresolved")
+                        .withStyle(ChatFormatting.RED),
+                    true
+                );
+                return InteractionResult.SUCCESS;
+            }
+
+            BlockPos hubPos = readHubPos(stack);
+            ResourceLocation hubDimension = readHubDimension(stack);
+            if (hubPos == null || hubDimension == null) {
+                player.displayClientMessage(
+                    Component.translatable("create_train_sloth.station_link.no_hub")
+                        .withStyle(ChatFormatting.RED),
+                    true
+                );
+                return InteractionResult.SUCCESS;
+            }
+
+            ResourceLocation currentDimension = level.dimension().location();
+            if (!currentDimension.equals(hubDimension)) {
+                player.displayClientMessage(
+                    Component.translatable("create_train_sloth.station_link.dimension_mismatch", hubDimension, currentDimension)
+                        .withStyle(ChatFormatting.RED),
+                    true
+                );
+                return InteractionResult.SUCCESS;
+            }
+
+            if (CreateTrainSlothMod.runtime().stationHubRegistry() == null) {
+                player.displayClientMessage(
+                    Component.translatable("create_train_sloth.station_link.runtime_not_ready")
+                        .withStyle(ChatFormatting.RED),
+                    true
+                );
+                return InteractionResult.SUCCESS;
+            }
+
+            StationHubId hubId = StationHubLocator.idFor(hubDimension, hubPos);
+            Optional<StationHub> existingHub = CreateTrainSlothMod.runtime().stationHubRegistry().findHub(hubId);
+            if (existingHub.isEmpty()) {
+                CreateTrainSlothMod.runtime().stationHubRegistry()
+                    .createHub(hubId, StationHubLocator.displayNameFor(hubPos));
+            }
+
+            String stationName = stationBlockEntity.getStation().name;
+            boolean added = CreateTrainSlothMod.runtime().stationHubRegistry().addPlatform(hubId, stationName);
+            if (level.getBlockEntity(hubPos) instanceof StationHubBlockEntity stationHubBlockEntity) {
+                stationHubBlockEntity.refreshNow();
+            }
+            player.displayClientMessage(
+                added
+                    ? Component.translatable("create_train_sloth.station_link.linked", stationName, hubId.value())
+                    : Component.translatable("create_train_sloth.station_link.already_linked", stationName, hubId.value()),
+                true
+            );
             return InteractionResult.SUCCESS;
         }
 
-        if (!hasHubBinding(stack)) {
-            player.displayClientMessage(
-                Component.translatable("create_train_sloth.station_link.no_hub")
-                    .withStyle(ChatFormatting.RED),
-                true
-            );
-            return InteractionResult.FAIL;
+        if (player.isShiftKeyDown() && hasHubBinding(stack)) {
+            if (level.isClientSide) {
+                return InteractionResult.SUCCESS;
+            }
+            clearHubBinding(stack);
+            player.displayClientMessage(Component.translatable("create_train_sloth.station_link.cleared"), true);
+            return InteractionResult.SUCCESS;
         }
 
-        if (!(level.getBlockEntity(clickedPos) instanceof StationBlockEntity stationBlockEntity)) {
-            player.displayClientMessage(
-                Component.translatable("create_train_sloth.station_link.station_invalid")
-                    .withStyle(ChatFormatting.RED),
-                true
-            );
-            return InteractionResult.FAIL;
-        }
-
-        if (stationBlockEntity.getStation() == null || stationBlockEntity.getStation().name == null) {
-            player.displayClientMessage(
-                Component.translatable("create_train_sloth.station_link.station_unresolved")
-                    .withStyle(ChatFormatting.RED),
-                true
-            );
-            return InteractionResult.FAIL;
-        }
-
-        BlockPos hubPos = readHubPos(stack);
-        ResourceLocation hubDimension = readHubDimension(stack);
-        if (hubPos == null || hubDimension == null) {
-            player.displayClientMessage(
-                Component.translatable("create_train_sloth.station_link.no_hub")
-                    .withStyle(ChatFormatting.RED),
-                true
-            );
-            return InteractionResult.FAIL;
-        }
-
-        ResourceLocation currentDimension = level.dimension().location();
-        if (!currentDimension.equals(hubDimension)) {
-            player.displayClientMessage(
-                Component.translatable("create_train_sloth.station_link.dimension_mismatch", hubDimension, currentDimension)
-                    .withStyle(ChatFormatting.RED),
-                true
-            );
-            return InteractionResult.FAIL;
-        }
-
-        if (CreateTrainSlothMod.runtime().stationHubRegistry() == null) {
-            player.displayClientMessage(
-                Component.translatable("create_train_sloth.station_link.runtime_not_ready")
-                    .withStyle(ChatFormatting.RED),
-                true
-            );
-            return InteractionResult.FAIL;
-        }
-
-        StationHubId hubId = StationHubLocator.idFor(hubDimension, hubPos);
-        Optional<StationHub> existingHub = CreateTrainSlothMod.runtime().stationHubRegistry().findHub(hubId);
-        if (existingHub.isEmpty()) {
-            CreateTrainSlothMod.runtime().stationHubRegistry()
-                .createHub(hubId, StationHubLocator.displayNameFor(hubPos));
-        }
-
-        String stationName = stationBlockEntity.getStation().name;
-        boolean added = CreateTrainSlothMod.runtime().stationHubRegistry().addPlatform(hubId, stationName);
-        player.displayClientMessage(
-            added
-                ? Component.translatable("create_train_sloth.station_link.linked", stationName, hubId.value())
-                : Component.translatable("create_train_sloth.station_link.already_linked", stationName, hubId.value()),
-            true
-        );
-        return InteractionResult.SUCCESS;
+        return placeResult;
     }
 
     @Override

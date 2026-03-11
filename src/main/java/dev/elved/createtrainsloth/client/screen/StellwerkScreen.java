@@ -10,6 +10,7 @@ import dev.elved.createtrainsloth.menu.StellwerkMenu;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -28,13 +29,21 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         CreateTrainSlothMod.MOD_ID,
         "textures/gui/stellwerk_icons.png"
     );
+    private static final ResourceLocation BUTTONS_TEXTURE = ResourceLocation.fromNamespaceAndPath(
+        CreateTrainSlothMod.MOD_ID,
+        "textures/gui/stellwerk_buttons.png"
+    );
 
-    private static final int GUI_WIDTH = 248;
-    private static final int GUI_HEIGHT = 222;
-    private static final int MAP_X = 70;
-    private static final int MAP_Y = 22;
-    private static final int MAP_W = 167;
-    private static final int MAP_H = 137;
+    private static final int GUI_WIDTH = 236;
+    private static final int GUI_HEIGHT = 186;
+    private static final int MAP_X = 10;
+    private static final int MAP_Y = 30;
+    private static final int MAP_W = 150;
+    private static final int MAP_H = 96;
+    private static final int CONTROL_X = 164;
+    private static final int CONTROL_Y = 30;
+    private static final int ASSIGNMENT_X = 116;
+    private static final int ASSIGNMENT_Y = 126;
 
     private final Map<Integer, ProjectedNode> projectedNodes = new HashMap<>();
     private int selectedSection = -1;
@@ -44,6 +53,14 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
     private Button lockButton;
     private Button unlockButton;
     private Button autoRoutingButton;
+    private Button generateLinesButton;
+    private Button trainPrevButton;
+    private Button trainNextButton;
+    private Button linePrevButton;
+    private Button lineNextButton;
+    private Button assignTrainButton;
+    private Button unassignTrainButton;
+    private Button routeCreatorButton;
 
     public StellwerkScreen(StellwerkMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -55,48 +72,133 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
     protected void init() {
         super.init();
 
-        int controlsX = leftPos + 163;
-        int controlsY = topPos + 169;
+        int controlsX = leftPos + CONTROL_X;
+        int controlsY = topPos + CONTROL_Y;
 
-        lockButton = Button.builder(
-                Component.translatable("create_train_sloth.stellwerk.button.lock"),
-                button -> onLockPressed()
-            )
-            .bounds(controlsX, controlsY, 34, 16)
-            .build();
-        addRenderableWidget(lockButton);
+        lockButton = addRenderableWidget(new StellwerkStyledButton(
+            controlsX,
+            controlsY,
+            58,
+            14,
+            Component.translatable("create_train_sloth.stellwerk.button.lock"),
+            button -> onLockPressed()
+        ));
 
-        unlockButton = Button.builder(
-                Component.translatable("create_train_sloth.stellwerk.button.unlock"),
-                button -> onUnlockPressed()
-            )
-            .bounds(controlsX + 38, controlsY, 34, 16)
-            .build();
-        addRenderableWidget(unlockButton);
+        unlockButton = addRenderableWidget(new StellwerkStyledButton(
+            controlsX,
+            controlsY + 16,
+            58,
+            14,
+            Component.translatable("create_train_sloth.stellwerk.button.unlock"),
+            button -> onUnlockPressed()
+        ));
 
-        autoRoutingButton = Button.builder(
-                autoRoutingText(),
-                button -> sendMenuButton(StellwerkMenu.BUTTON_TOGGLE_AUTOROUTING)
-            )
-            .bounds(controlsX, controlsY + 19, 72, 16)
-            .build();
-        addRenderableWidget(autoRoutingButton);
+        autoRoutingButton = addRenderableWidget(new StellwerkStyledButton(
+            controlsX,
+            controlsY + 32,
+            58,
+            14,
+            autoRoutingText(),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_TOGGLE_AUTOROUTING)
+        ));
 
-        addRenderableWidget(Button.builder(Component.literal("+"), button -> zoom = Mth.clamp(zoom + 0.15D, 0.6D, 2.25D))
-            .bounds(controlsX, controlsY + 38, 22, 16)
-            .build());
-        addRenderableWidget(Button.builder(Component.literal("-"), button -> zoom = Mth.clamp(zoom - 0.15D, 0.6D, 2.25D))
-            .bounds(controlsX + 25, controlsY + 38, 22, 16)
-            .build());
-        addRenderableWidget(Button.builder(
-                Component.translatable("create_train_sloth.stellwerk.button.center"),
-                button -> {
-                    zoom = 1.0D;
-                    panX = 0D;
-                    panY = 0D;
-                })
-            .bounds(controlsX + 50, controlsY + 38, 22, 16)
-            .build());
+        generateLinesButton = addRenderableWidget(new StellwerkStyledButton(
+            controlsX,
+            controlsY + 48,
+            58,
+            14,
+            Component.translatable("create_train_sloth.stellwerk.button.generate_lines"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_GENERATE_LINES)
+        ));
+
+        addRenderableWidget(new StellwerkStyledButton(
+            controlsX,
+            controlsY + 64,
+            18,
+            14,
+            Component.literal("+"),
+            button -> zoom = Mth.clamp(zoom + 0.15D, 0.6D, 2.25D)
+        ));
+        addRenderableWidget(new StellwerkStyledButton(
+            controlsX + 20,
+            controlsY + 64,
+            18,
+            14,
+            Component.literal("-"),
+            button -> zoom = Mth.clamp(zoom - 0.15D, 0.6D, 2.25D)
+        ));
+        addRenderableWidget(new StellwerkStyledButton(
+            controlsX + 40,
+            controlsY + 64,
+            18,
+            14,
+            Component.translatable("create_train_sloth.stellwerk.button.center"),
+            button -> {
+                zoom = 1.0D;
+                panX = 0D;
+                panY = 0D;
+            }
+        ));
+        routeCreatorButton = addRenderableWidget(new StellwerkStyledButton(
+            controlsX,
+            controlsY + 80,
+            58,
+            14,
+            Component.translatable("create_train_sloth.stellwerk.button.route_creator"),
+            button -> openRouteCreator()
+        ));
+
+        int assignmentX = leftPos + ASSIGNMENT_X;
+        int assignmentY = topPos + ASSIGNMENT_Y;
+
+        trainPrevButton = addRenderableWidget(new StellwerkStyledButton(
+            assignmentX,
+            assignmentY + 10,
+            16,
+            16,
+            Component.literal("<"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_TRAIN_PREV)
+        ));
+        trainNextButton = addRenderableWidget(new StellwerkStyledButton(
+            assignmentX + 78,
+            assignmentY + 10,
+            16,
+            16,
+            Component.literal(">"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_TRAIN_NEXT)
+        ));
+        linePrevButton = addRenderableWidget(new StellwerkStyledButton(
+            assignmentX,
+            assignmentY + 26,
+            16,
+            16,
+            Component.literal("<"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_LINE_PREV)
+        ));
+        lineNextButton = addRenderableWidget(new StellwerkStyledButton(
+            assignmentX + 78,
+            assignmentY + 26,
+            16,
+            16,
+            Component.literal(">"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_LINE_NEXT)
+        ));
+        assignTrainButton = addRenderableWidget(new StellwerkStyledButton(
+            assignmentX + 16,
+            assignmentY + 42,
+            38,
+            16,
+            Component.translatable("create_train_sloth.stellwerk.button.assign_line"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_ASSIGN_SELECTED)
+        ));
+        unassignTrainButton = addRenderableWidget(new StellwerkStyledButton(
+            assignmentX + 56,
+            assignmentY + 42,
+            38,
+            16,
+            Component.translatable("create_train_sloth.stellwerk.button.unassign_line"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_UNASSIGN_SELECTED)
+        ));
 
         updateButtonState();
     }
@@ -116,37 +218,54 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
 
     @Override
     protected void renderLabels(GuiGraphics graphics, int mouseX, int mouseY) {
-        graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.title"), 10, 7, 0xF0E6C8, false);
+        graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.title"), 10, 8, 0x5C2B1E, false);
 
         String summary = "N:" + menu.nodeCount() + " S:" + menu.sectionCount() + " T:" + menu.trainCount();
-        graphics.drawString(font, summary, 10, 18, 0xB0A98A, false);
-        graphics.drawString(font, "F " + menu.freeCount(), 92, 18, StellwerkSectionState.FREE.color(), false);
-        graphics.drawString(font, "R " + menu.reservedCount(), 118, 18, StellwerkSectionState.RESERVED.color(), false);
-        graphics.drawString(font, "O " + menu.occupiedCount(), 145, 18, StellwerkSectionState.OCCUPIED.color(), false);
-        graphics.drawString(font, "B " + menu.blockedCount(), 173, 18, StellwerkSectionState.BLOCKED.color(), false);
+        graphics.drawString(font, summary, 10, 19, 0x7A5A3E, false);
+        graphics.drawString(font, "F " + menu.freeCount(), 94, 19, StellwerkSectionState.FREE.color(), false);
+        graphics.drawString(font, "R " + menu.reservedCount(), 118, 19, StellwerkSectionState.RESERVED.color(), false);
+        graphics.drawString(font, "O " + menu.occupiedCount(), 145, 19, StellwerkSectionState.OCCUPIED.color(), false);
+        graphics.drawString(font, "B " + menu.blockedCount(), 171, 19, StellwerkSectionState.BLOCKED.color(), false);
 
         StellwerkSectionView section = selectedSectionView();
         if (section == null) {
-            graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.no_selection"), 10, 170, 0x9A9272, false);
-            return;
+            graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.no_selection"), 10, 129, 0x6F6C65, false);
+        } else {
+            graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.selected"), 10, 129, 0x5D5A52, false);
+            graphics.drawString(
+                font,
+                Component.translatable("create_train_sloth.stellwerk.section_state", section.state().name()),
+                10,
+                140,
+                section.state().color(),
+                false
+            );
+            String occupiedBy = section.occupiedBy() == null || section.occupiedBy().isBlank() ? "-" : section.occupiedBy();
+            graphics.drawString(
+                font,
+                Component.translatable("create_train_sloth.stellwerk.occupied_by", trimToWidth(occupiedBy, 52)),
+                10,
+                151,
+                0x6D6960,
+                false
+            );
         }
 
-        graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.selected"), 10, 167, 0xD3C8A3, false);
+        graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.assigned_label", trimToWidth(menu.selectedAssignmentLabel(), 12)), 116, 128, 0x5D5A52, false);
         graphics.drawString(
             font,
-            Component.translatable("create_train_sloth.stellwerk.section_state", section.state().name()),
-            10,
-            179,
-            section.state().color(),
+            "T: " + trimToWidth(menu.selectedTrainLabel(), 48),
+            132,
+            141,
+            0xEFE2C8,
             false
         );
-        String occupiedBy = section.occupiedBy() == null || section.occupiedBy().isBlank() ? "-" : section.occupiedBy();
         graphics.drawString(
             font,
-            Component.translatable("create_train_sloth.stellwerk.occupied_by", occupiedBy),
-            10,
-            191,
-            0xB7B099,
+            "L: " + trimToWidth(menu.selectedLineLabel(), 48),
+            132,
+            157,
+            0xEFE2C8,
             false
         );
     }
@@ -305,6 +424,17 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         boolean hasSelection = selected != null;
         lockButton.active = hasSelection;
         unlockButton.active = hasSelection && selected.locked();
+
+        boolean hasLines = menu.lineCount() > 0;
+        boolean hasTrains = menu.trackedTrainCount() > 0;
+        generateLinesButton.active = true;
+        trainPrevButton.active = hasTrains;
+        trainNextButton.active = hasTrains;
+        linePrevButton.active = hasLines;
+        lineNextButton.active = hasLines;
+        assignTrainButton.active = hasLines && hasTrains;
+        unassignTrainButton.active = hasTrains && !"-".equals(menu.selectedAssignmentLabel());
+        routeCreatorButton.active = hasLines;
     }
 
     private Component autoRoutingText() {
@@ -313,6 +443,13 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
                 ? "create_train_sloth.stellwerk.button.auto_on"
                 : "create_train_sloth.stellwerk.button.auto_off"
         );
+    }
+
+    private void openRouteCreator() {
+        if (minecraft == null || minecraft.player == null) {
+            return;
+        }
+        minecraft.setScreen(new StellwerkRouteCreatorScreen(menu, minecraft.player.getInventory(), title));
     }
 
     private StellwerkSchematicSnapshot snapshot() {
@@ -369,6 +506,71 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
 
     private static double sq(double value) {
         return value * value;
+    }
+
+    private String trimToWidth(String value, int maxWidth) {
+        if (value == null || value.isBlank()) {
+            return "-";
+        }
+        if (font.width(value) <= maxWidth) {
+            return value;
+        }
+        return font.plainSubstrByWidth(value, Math.max(0, maxWidth - font.width("..."))) + "...";
+    }
+
+    private static class StellwerkStyledButton extends Button {
+
+        private static final int TEXTURE_WIDTH = 128;
+        private static final int TEXTURE_HEIGHT = 48;
+
+        protected StellwerkStyledButton(
+            int x,
+            int y,
+            int width,
+            int height,
+            Component message,
+            OnPress onPress
+        ) {
+            super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+            int v = !active ? 32 : isHoveredOrFocused() ? 16 : 0;
+            blitButtonTiled(graphics, getX(), getY(), width, height, v);
+
+            int color = !active ? 0x9A8E80 : isHoveredOrFocused() ? 0xFFF7E8 : 0xFFEADBC2;
+            graphics.drawCenteredString(
+                Minecraft.getInstance().font,
+                getMessage(),
+                getX() + width / 2,
+                getY() + (height - 8) / 2,
+                color
+            );
+        }
+
+        private void blitButtonTiled(GuiGraphics graphics, int x, int y, int width, int height, int v) {
+            if (width <= 8) {
+                graphics.blit(BUTTONS_TEXTURE, x, y, 0, v, width, height, TEXTURE_WIDTH, TEXTURE_HEIGHT);
+                return;
+            }
+
+            int left = 4;
+            int right = 4;
+            int middleWidth = width - left - right;
+
+            graphics.blit(BUTTONS_TEXTURE, x, y, 0, v, left, height, TEXTURE_WIDTH, TEXTURE_HEIGHT);
+
+            int drawX = x + left;
+            while (middleWidth > 0) {
+                int slice = Math.min(120, middleWidth);
+                graphics.blit(BUTTONS_TEXTURE, drawX, y, 4, v, slice, height, TEXTURE_WIDTH, TEXTURE_HEIGHT);
+                drawX += slice;
+                middleWidth -= slice;
+            }
+
+            graphics.blit(BUTTONS_TEXTURE, x + width - right, y, 124, v, right, height, TEXTURE_WIDTH, TEXTURE_HEIGHT);
+        }
     }
 
     private record ProjectedNode(int x, int y) {

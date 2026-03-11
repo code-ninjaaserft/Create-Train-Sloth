@@ -141,6 +141,14 @@ public class TrainSlothRuntime {
         return stationHubRegistry;
     }
 
+    public LineRegistry lineRegistry() {
+        return lineRegistry;
+    }
+
+    public LineManager lineManager() {
+        return lineManager;
+    }
+
     public TrainSlothCommands commands() {
         return commands;
     }

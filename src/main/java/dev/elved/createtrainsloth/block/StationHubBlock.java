@@ -2,30 +2,36 @@ package dev.elved.createtrainsloth.block;
 
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
-import dev.elved.createtrainsloth.CreateTrainSlothMod;
-import dev.elved.createtrainsloth.station.StationHub;
-import dev.elved.createtrainsloth.station.StationHubId;
-import dev.elved.createtrainsloth.station.StationHubLocator;
-import java.util.Optional;
+import dev.elved.createtrainsloth.block.entity.StationHubBlockEntity;
+import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
+import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.chat.Component;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.HorizontalDirectionalBlock;
+import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
-public class StationHubBlock extends HorizontalDirectionalBlock implements IWrenchable {
+public class StationHubBlock extends BaseEntityBlock implements IWrenchable {
 
+    private static final ResourceLocation CREATE_WRENCH = ResourceLocation.fromNamespaceAndPath("create", "wrench");
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     public static final MapCodec<StationHubBlock> CODEC = simpleCodec(StationHubBlock::new);
 
@@ -35,7 +41,7 @@ public class StationHubBlock extends HorizontalDirectionalBlock implements IWren
     }
 
     @Override
-    protected MapCodec<? extends HorizontalDirectionalBlock> codec() {
+    protected MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
 
@@ -44,11 +50,24 @@ public class StationHubBlock extends HorizontalDirectionalBlock implements IWren
         return RenderShape.MODEL;
     }
 
+    @Nullable
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return new StationHubBlockEntity(pos, state);
+    }
+
+    @Nullable
+    @Override
+    public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state, BlockEntityType<T> type) {
+        return createTickerHelper(type, TrainSlothRegistries.STATION_HUB_BLOCK_ENTITY.get(), StationHubBlockEntity::serverTick);
+    }
+
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) {
         builder.add(FACING);
     }
 
+    @Nullable
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
         return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
@@ -65,6 +84,29 @@ public class StationHubBlock extends HorizontalDirectionalBlock implements IWren
     }
 
     @Override
+    protected ItemInteractionResult useItemOn(
+        ItemStack stack,
+        BlockState state,
+        Level level,
+        BlockPos pos,
+        Player player,
+        InteractionHand hand,
+        BlockHitResult hitResult
+    ) {
+        if (player == null || player.isShiftKeyDown()) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        if (CREATE_WRENCH.equals(BuiltInRegistries.ITEM.getKey(stack.getItem()))) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        return openMenu(level, pos, player) == InteractionResult.PASS
+            ? ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION
+            : ItemInteractionResult.SUCCESS;
+    }
+
+    @Override
     protected InteractionResult useWithoutItem(
         BlockState state,
         Level level,
@@ -72,21 +114,22 @@ public class StationHubBlock extends HorizontalDirectionalBlock implements IWren
         Player player,
         BlockHitResult hitResult
     ) {
-        if (player == null || level.isClientSide()) {
+        if (player == null || player.isShiftKeyDown()) {
+            return InteractionResult.PASS;
+        }
+        return openMenu(level, pos, player);
+    }
+
+    private InteractionResult openMenu(Level level, BlockPos pos, Player player) {
+        if (level.isClientSide()) {
             return InteractionResult.SUCCESS;
         }
 
-        if (CreateTrainSlothMod.runtime().stationHubRegistry() == null) {
+        if (level.getBlockEntity(pos) instanceof StationHubBlockEntity stationHubBlockEntity) {
+            player.openMenu(stationHubBlockEntity, pos);
             return InteractionResult.CONSUME;
         }
 
-        StationHubId hubId = StationHubLocator.idFor(level.dimension(), pos);
-        Optional<StationHub> existingHub = CreateTrainSlothMod.runtime().stationHubRegistry().findHub(hubId);
-        int platforms = existingHub.map(StationHub::platformCount).orElse(0);
-        player.displayClientMessage(
-            Component.translatable("create_train_sloth.hub_block.info", hubId.value(), platforms),
-            true
-        );
-        return InteractionResult.CONSUME;
+        return InteractionResult.PASS;
     }
 }

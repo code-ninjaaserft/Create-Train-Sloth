@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=down": { "model": "create_train_sloth:block/station_link" },
+    "facing=up": { "model": "create_train_sloth:block/station_link", "x": 180, "uvlock": true },
+    "facing=north": { "model": "create_train_sloth:block/station_link", "x": 90, "y": 180, "uvlock": true },
+    "facing=south": { "model": "create_train_sloth:block/station_link", "x": 90, "uvlock": true },
+    "facing=west": { "model": "create_train_sloth:block/station_link", "x": 90, "y": 90, "uvlock": true },
+    "facing=east": { "model": "create_train_sloth:block/station_link", "x": 90, "y": 270, "uvlock": true }
+  }
+}

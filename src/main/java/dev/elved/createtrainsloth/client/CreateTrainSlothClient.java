@@ -1,6 +1,7 @@
 package dev.elved.createtrainsloth.client;
 
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
+import dev.elved.createtrainsloth.client.screen.StationHubScreen;
 import dev.elved.createtrainsloth.client.screen.StellwerkScreen;
 import dev.elved.createtrainsloth.ponder.TrainSlothPonderPlugin;
 import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
@@ -25,5 +26,6 @@ public class CreateTrainSlothClient {
 
     private void onRegisterMenuScreens(RegisterMenuScreensEvent event) {
         event.register(TrainSlothRegistries.STELLWERK_MENU.get(), StellwerkScreen::new);
+        event.register(TrainSlothRegistries.STATION_HUB_MENU.get(), StationHubScreen::new);
     }
 }

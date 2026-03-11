@@ -2,6 +2,7 @@ package dev.elved.createtrainsloth.menu;
 
 import dev.elved.createtrainsloth.block.entity.InterlockingBlockEntity;
 import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
@@ -15,6 +16,13 @@ import org.jetbrains.annotations.Nullable;
 public class StellwerkMenu extends AbstractContainerMenu {
 
     public static final int BUTTON_TOGGLE_AUTOROUTING = 0;
+    public static final int BUTTON_GENERATE_LINES = 10;
+    public static final int BUTTON_ASSIGN_SELECTED = 11;
+    public static final int BUTTON_UNASSIGN_SELECTED = 12;
+    public static final int BUTTON_TRAIN_PREV = 13;
+    public static final int BUTTON_TRAIN_NEXT = 14;
+    public static final int BUTTON_LINE_PREV = 15;
+    public static final int BUTTON_LINE_NEXT = 16;
     public static final int BUTTON_LOCK_SECTION_BASE = 1_000;
     public static final int BUTTON_UNLOCK_SECTION_BASE = 2_000;
     public static final int BUTTON_SECTION_INDEX_LIMIT = 9_999;
@@ -62,6 +70,10 @@ public class StellwerkMenu extends AbstractContainerMenu {
                     case 5 -> countSectionsWithState("OCCUPIED");
                     case 6 -> countSectionsWithState("BLOCKED");
                     case 7 -> StellwerkMenu.this.blockEntity.snapshot().trains().size();
+                    case 8 -> StellwerkMenu.this.blockEntity.syncedLineIds().size();
+                    case 9 -> StellwerkMenu.this.blockEntity.syncedTrainIds().size();
+                    case 10 -> StellwerkMenu.this.blockEntity.selectedTrainIndex();
+                    case 11 -> StellwerkMenu.this.blockEntity.selectedLineIndex();
                     default -> 0;
                 };
             }
@@ -72,7 +84,7 @@ public class StellwerkMenu extends AbstractContainerMenu {
 
             @Override
             public int getCount() {
-                return 8;
+                return 12;
             }
         };
         addDataSlots(data);
@@ -109,6 +121,34 @@ public class StellwerkMenu extends AbstractContainerMenu {
         if (id == BUTTON_TOGGLE_AUTOROUTING) {
             blockEntity.toggleAutoRouting();
             return true;
+        }
+
+        if (id == BUTTON_GENERATE_LINES) {
+            return blockEntity.generateLinesFromHubs();
+        }
+
+        if (id == BUTTON_ASSIGN_SELECTED) {
+            return blockEntity.assignSelectedTrainToSelectedLine();
+        }
+
+        if (id == BUTTON_UNASSIGN_SELECTED) {
+            return blockEntity.unassignSelectedTrain();
+        }
+
+        if (id == BUTTON_TRAIN_PREV) {
+            return blockEntity.cycleTrainSelection(-1);
+        }
+
+        if (id == BUTTON_TRAIN_NEXT) {
+            return blockEntity.cycleTrainSelection(1);
+        }
+
+        if (id == BUTTON_LINE_PREV) {
+            return blockEntity.cycleLineSelection(-1);
+        }
+
+        if (id == BUTTON_LINE_NEXT) {
+            return blockEntity.cycleLineSelection(1);
         }
 
         if (id >= BUTTON_LOCK_SECTION_BASE && id <= BUTTON_LOCK_SECTION_BASE + BUTTON_SECTION_INDEX_LIMIT) {
@@ -161,6 +201,56 @@ public class StellwerkMenu extends AbstractContainerMenu {
 
     public int trainCount() {
         return data.get(7);
+    }
+
+    public int lineCount() {
+        return data.get(8);
+    }
+
+    public int trackedTrainCount() {
+        return data.get(9);
+    }
+
+    public String selectedTrainLabel() {
+        if (blockEntity == null) {
+            return "-";
+        }
+        return blockEntity.selectedTrainLabel();
+    }
+
+    public String selectedLineLabel() {
+        if (blockEntity == null) {
+            return "-";
+        }
+        return blockEntity.selectedLineLabel();
+    }
+
+    public String selectedAssignmentLabel() {
+        if (blockEntity == null) {
+            return "-";
+        }
+        return blockEntity.selectedTrainAssignmentLabel();
+    }
+
+    public List<String> selectedLineStations() {
+        if (blockEntity == null) {
+            return List.of();
+        }
+        return blockEntity.selectedLineStations();
+    }
+
+    public String selectedLineName() {
+        if (blockEntity == null) {
+            return "-";
+        }
+        return blockEntity.selectedLineName();
+    }
+
+    public String selectedServiceClass() {
+        if (blockEntity == null) {
+            return "RE";
+        }
+        return blockEntity.selectedServiceClass();
     }
 
     @Nullable

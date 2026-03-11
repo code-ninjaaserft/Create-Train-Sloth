@@ -1,0 +1,26 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    " R ",
+    "PCP",
+    " T "
+  ],
+  "key": {
+    "R": {
+      "item": "create:redstone_link"
+    },
+    "P": {
+      "item": "create:precision_mechanism"
+    },
+    "C": {
+      "item": "create:train_casing"
+    },
+    "T": {
+      "item": "minecraft:rail"
+    }
+  },
+  "result": {
+    "item": "create_train_sloth:interlocking_block",
+    "count": 1
+  }
+}
