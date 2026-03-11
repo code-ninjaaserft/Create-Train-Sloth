@@ -44,6 +44,7 @@ public class StellwerkRouteCreatorScreen extends AbstractContainerScreen<Stellwe
     private Button serviceNextButton;
     private Button createRouteButton;
     private Button applyMetaButton;
+    private Button deleteRouteButton;
     private Button addStationButton;
     private Button removeStationButton;
     private EditBox createRouteNameInput;
@@ -130,10 +131,18 @@ public class StellwerkRouteCreatorScreen extends AbstractContainerScreen<Stellwe
         applyMetaButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 130,
             topPos + 74,
-            82,
+            40,
             14,
             Component.translatable("create_train_sloth.stellwerk.route_creator.button.apply"),
             button -> applyRouteMeta()
+        ));
+        deleteRouteButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 172,
+            topPos + 74,
+            40,
+            14,
+            Component.translatable("create_train_sloth.stellwerk.route_creator.button.delete_route"),
+            button -> deleteRoute()
         ));
 
         stationInput = new EditBox(font, contentLeft, topPos + 168, 128, 14, Component.empty());
@@ -191,6 +200,23 @@ public class StellwerkRouteCreatorScreen extends AbstractContainerScreen<Stellwe
             0x5C2B1E,
             false
         );
+        if (!"-".equals(menu.selectedLineLabel())) {
+            String recommendation = Component.translatable(
+                "create_train_sloth.stellwerk.route_creator.recommendation",
+                menu.selectedLineRecommendedTrainCount(),
+                menu.selectedLineAssignedTrainCount()
+            ).getString();
+            graphics.drawString(font, trimToWidth(recommendation, 212), 12, 20, 0xD7CEB8, false);
+        } else {
+            graphics.drawString(
+                font,
+                Component.translatable("create_train_sloth.stellwerk.route_creator.recommendation_none"),
+                12,
+                20,
+                0xD7CEB8,
+                false
+            );
+        }
         graphics.drawString(
             font,
             Component.translatable("create_train_sloth.stellwerk.route_creator.line"),
@@ -411,6 +437,15 @@ public class StellwerkRouteCreatorScreen extends AbstractContainerScreen<Stellwe
         ));
     }
 
+    private void deleteRoute() {
+        String lineId = menu.selectedLineLabel();
+        if ("-".equals(lineId)) {
+            return;
+        }
+        PacketDistributor.sendToServer(EditStellwerkRoutePayload.deleteRoute(menu.blockPos(), lineId));
+        selectedStationIndex = -1;
+    }
+
     private void moveStation(int fromIndex, int toIndex) {
         String lineId = menu.selectedLineLabel();
         if ("-".equals(lineId)) {
@@ -500,6 +535,7 @@ public class StellwerkRouteCreatorScreen extends AbstractContainerScreen<Stellwe
         serviceNextButton.active = true;
         createRouteButton.active = !createRouteNameInput.getValue().trim().isBlank();
         applyMetaButton.active = hasLine && !routeNameInput.getValue().trim().isBlank();
+        deleteRouteButton.active = hasLine;
         addStationButton.active = hasLine && !stationInput.getValue().trim().isBlank();
         removeStationButton.active = hasLine && hasSelection;
         backButton.active = true;

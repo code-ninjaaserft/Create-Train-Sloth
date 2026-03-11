@@ -54,7 +54,6 @@ public class TrainSlothRuntime {
         stationStateTracker = new StationStateTracker();
         headwayCalculator = new HeadwayCalculator();
         debugOverlay = new DebugOverlay();
-        dispatchController = new DispatchController(lineManager, stationStateTracker, headwayCalculator, debugOverlay);
         reservationAwarenessService = new ReservationAwarenessService();
         routePreferenceResolver = new RoutePreferenceResolver(reservationAwarenessService);
         scheduleAlternativeResolver = new ScheduleAlternativeResolver();
@@ -63,6 +62,13 @@ public class TrainSlothRuntime {
             scheduleAlternativeResolver,
             stationHubRegistry,
             reservationAwarenessService
+        );
+        dispatchController = new DispatchController(
+            lineManager,
+            stationStateTracker,
+            headwayCalculator,
+            platformAssignmentService,
+            debugOverlay
         );
         interlockingControlService = new InterlockingControlService();
         stellwerkControlModeService = new StellwerkControlModeService();

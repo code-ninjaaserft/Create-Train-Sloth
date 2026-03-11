@@ -35,7 +35,7 @@ public class PlatformAssignmentService {
         ReservationAwarenessService reservationAwarenessService
     ) {
         this.lineManager = lineManager;
-        this.destinationResolver = new ScheduleDestinationResolver(scheduleAlternativeResolver, stationHubRegistry);
+        this.destinationResolver = new ScheduleDestinationResolver(scheduleAlternativeResolver, stationHubRegistry, lineManager);
         this.reservationAwarenessService = reservationAwarenessService;
     }
 

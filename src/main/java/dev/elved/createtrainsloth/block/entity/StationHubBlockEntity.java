@@ -3,22 +3,29 @@ package dev.elved.createtrainsloth.block.entity;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.interlocking.schematic.StellwerkSectionState;
 import dev.elved.createtrainsloth.menu.StationHubMenu;
+import dev.elved.createtrainsloth.block.StationLinkBlock;
 import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubId;
 import dev.elved.createtrainsloth.station.StationHubLocator;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
+import dev.elved.createtrainsloth.station.StationLinkKeyUtil;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -126,10 +133,17 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
             return false;
         }
 
-        boolean removed = registry.removePlatform(hubId(), selected);
-        if (!removed) {
+        StationHubId hubId = hubId();
+        String normalizedStation = selected.toLowerCase(Locale.ROOT);
+        boolean stationExists = registry.findHub(hubId)
+            .map(hub -> hub.platformStationNames().contains(normalizedStation))
+            .orElse(false);
+        if (!stationExists) {
             return false;
         }
+
+        Set<String> linkKeys = registry.removePlatformAndCollectLinkKeys(hubId, selected);
+        destroyLinkedStationLinks(linkKeys);
 
         refreshHubData(level, true);
         setChangedAndSync();
@@ -153,21 +167,54 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
         }
 
         StationHubId hubId = hubId();
-        if (!registry.removePlatform(hubId, oldValue)) {
+        String normalizedOld = oldValue.toLowerCase(Locale.ROOT);
+        String normalizedNew = newValue.toLowerCase(Locale.ROOT);
+        if (normalizedOld.equals(normalizedNew)) {
             return false;
         }
 
+        StationHub hub = registry.findHub(hubId).orElse(null);
+        if (hub == null || !hub.platformStationNames().contains(normalizedOld) || hub.platformStationNames().contains(normalizedNew)) {
+            return false;
+        }
+
+        Set<String> linkKeys = registry.removePlatformAndCollectLinkKeys(hubId, oldValue);
         boolean added = registry.addPlatform(hubId, newValue);
         if (!added) {
             registry.addPlatform(hubId, oldValue);
+            for (String linkKey : linkKeys) {
+                registry.registerStationLink(hubId, oldValue, linkKey);
+            }
+            return false;
+        }
+        for (String linkKey : linkKeys) {
+            registry.registerStationLink(hubId, newValue, linkKey);
+        }
+
+        refreshHubData(level, true);
+        int renamedIndex = syncedPlatforms.indexOf(normalizedNew);
+        if (renamedIndex >= 0) {
+            selectedPlatformIndex = renamedIndex;
+        }
+        setChangedAndSync();
+        return true;
+    }
+
+    public boolean renameHub(String newName) {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+
+        StationHubRegistry registry = CreateTrainSlothMod.runtime().stationHubRegistry();
+        if (registry == null) {
+            return false;
+        }
+
+        if (!registry.renameHub(hubId(), newName)) {
             return false;
         }
 
         refreshHubData(level, true);
-        int renamedIndex = syncedPlatforms.indexOf(newValue.toLowerCase());
-        if (renamedIndex >= 0) {
-            selectedPlatformIndex = renamedIndex;
-        }
         setChangedAndSync();
         return true;
     }
@@ -267,6 +314,31 @@ public class StationHubBlockEntity extends BlockEntity implements MenuProvider {
         setChanged();
         if (level != null && !level.isClientSide()) {
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+        }
+    }
+
+    private void destroyLinkedStationLinks(Set<String> linkKeys) {
+        if (level == null || level.isClientSide() || linkKeys.isEmpty() || level.getServer() == null) {
+            return;
+        }
+
+        for (String linkKey : linkKeys) {
+            StationLinkKeyUtil.LinkLocation location = StationLinkKeyUtil.decode(linkKey);
+            if (location == null) {
+                continue;
+            }
+
+            ServerLevel targetLevel = level.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, location.dimension()));
+            if (targetLevel == null) {
+                continue;
+            }
+
+            BlockPos linkPos = location.pos();
+            if (!(targetLevel.getBlockState(linkPos).getBlock() instanceof StationLinkBlock)) {
+                continue;
+            }
+
+            targetLevel.destroyBlock(linkPos, true);
         }
     }
 

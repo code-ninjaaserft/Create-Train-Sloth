@@ -3,6 +3,7 @@ package dev.elved.createtrainsloth.client.screen;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.menu.StationHubMenu;
 import dev.elved.createtrainsloth.network.RenameHubPlatformPayload;
+import dev.elved.createtrainsloth.network.RenameStationHubPayload;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -28,11 +29,14 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
     private static final int GUI_HEIGHT = 186;
 
     private EditBox renameBox;
+    private EditBox hubNameBox;
     private Button previousButton;
     private Button nextButton;
     private Button removeButton;
     private Button renameButton;
+    private Button renameHubButton;
     private String lastSelectedPlatform = "-";
+    private String lastHubName = "-";
 
     public StationHubScreen(StationHubMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -45,7 +49,21 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
         super.init();
 
         int contentLeft = leftPos + 12;
-        int buttonRowY = topPos + 136;
+        int buttonRowY = topPos + 144;
+
+        hubNameBox = new EditBox(font, contentLeft, topPos + 30, 168, 16, Component.empty());
+        hubNameBox.setValue(menu.hubName().equals("-") ? "" : menu.hubName());
+        hubNameBox.setMaxLength(100);
+        addRenderableWidget(hubNameBox);
+
+        renameHubButton = addRenderableWidget(new HubStyledButton(
+            contentLeft + 170,
+            topPos + 30,
+            42,
+            16,
+            Component.translatable("create_train_sloth.hub.button.rename_hub"),
+            button -> renameHub()
+        ));
 
         previousButton = addRenderableWidget(new HubStyledButton(
             contentLeft,
@@ -74,19 +92,21 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
 
         renameButton = addRenderableWidget(new HubStyledButton(
             contentLeft,
-            topPos + 156,
+            topPos + 164,
             212,
             16,
             Component.translatable("create_train_sloth.hub.button.rename"),
             button -> renameSelectedPlatform()
         ));
 
-        renameBox = new EditBox(font, contentLeft, topPos + 116, 212, 16, Component.empty());
+        renameBox = new EditBox(font, contentLeft, topPos + 124, 212, 16, Component.empty());
         renameBox.setValue(menu.selectedPlatformName().equals("-") ? "" : menu.selectedPlatformName());
         renameBox.setMaxLength(100);
         addRenderableWidget(renameBox);
         setInitialFocus(renameBox);
 
+        lastSelectedPlatform = menu.selectedPlatformName();
+        lastHubName = menu.hubName();
         updateButtonState();
     }
 
@@ -98,6 +118,12 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
         if (!selected.equals(lastSelectedPlatform) && !renameBox.isFocused()) {
             renameBox.setValue(selected.equals("-") ? "" : selected);
             lastSelectedPlatform = selected;
+        }
+
+        String hubName = menu.hubName();
+        if (!hubName.equals(lastHubName) && !hubNameBox.isFocused()) {
+            hubNameBox.setValue(hubName.equals("-") ? "" : hubName);
+            lastHubName = hubName;
         }
 
         updateButtonState();
@@ -118,12 +144,12 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
             0x5C2B1E,
             false
         );
-        graphics.drawString(font, trimToWidth(menu.hubName(), 208), 12, 20, 0x7A5A3E, false);
+        graphics.drawString(font, Component.translatable("create_train_sloth.hub.hub_name"), 12, 20, 0xD7CEB8, false);
         graphics.drawString(
             font,
             Component.translatable("create_train_sloth.hub.platform_count", menu.platformCount()),
             12,
-            34,
+            50,
             0xE7DEC9,
             false
         );
@@ -136,7 +162,7 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
                 menu.blockedPlatforms()
             ),
             12,
-            46,
+            62,
             0xD7CEB8,
             false
         );
@@ -144,12 +170,12 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
             font,
             Component.translatable("create_train_sloth.hub.selected_station"),
             12,
-            60,
+            76,
             0xE7DEC9,
             false
         );
-        graphics.drawString(font, trimToWidth(menu.selectedPlatformName(), 208), 12, 72, 0xF6ECD4, false);
-        graphics.drawString(font, Component.translatable("create_train_sloth.hub.rename_hint"), 12, 104, 0xD7CEB8, false);
+        graphics.drawString(font, trimToWidth(menu.selectedPlatformName(), 208), 12, 88, 0xF6ECD4, false);
+        graphics.drawString(font, Component.translatable("create_train_sloth.hub.rename_hint"), 12, 112, 0xD7CEB8, false);
     }
 
     @Override
@@ -163,7 +189,14 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
             renameSelectedPlatform();
             return true;
         }
+        if ((keyCode == 257 || keyCode == 335) && hubNameBox.isFocused()) {
+            renameHub();
+            return true;
+        }
 
+        if (hubNameBox.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
         if (renameBox.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
@@ -173,6 +206,9 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         if (renameBox.charTyped(codePoint, modifiers)) {
+            return true;
+        }
+        if (hubNameBox.charTyped(codePoint, modifiers)) {
             return true;
         }
         return super.charTyped(codePoint, modifiers);
@@ -195,12 +231,24 @@ public class StationHubScreen extends AbstractContainerScreen<StationHubMenu> {
         PacketDistributor.sendToServer(new RenameHubPlatformPayload(menu.blockPos(), selected, renamed));
     }
 
+    private void renameHub() {
+        String renamed = hubNameBox.getValue().trim();
+        if (renamed.isBlank() || renamed.equals(menu.hubName())) {
+            return;
+        }
+
+        PacketDistributor.sendToServer(new RenameStationHubPayload(menu.blockPos(), renamed));
+    }
+
     private void updateButtonState() {
         boolean hasSelection = menu.platformCount() > 0 && !menu.selectedPlatformName().equals("-");
         previousButton.active = hasSelection;
         nextButton.active = hasSelection;
         removeButton.active = hasSelection;
-        renameButton.active = hasSelection && !renameBox.getValue().trim().isBlank();
+        renameButton.active = hasSelection
+            && !renameBox.getValue().trim().isBlank()
+            && !renameBox.getValue().trim().equals(menu.selectedPlatformName());
+        renameHubButton.active = !hubNameBox.getValue().trim().isBlank() && !hubNameBox.getValue().trim().equals(menu.hubName());
     }
 
     private String trimToWidth(String value, int maxWidth) {

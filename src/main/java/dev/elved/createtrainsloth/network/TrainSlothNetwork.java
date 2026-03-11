@@ -18,6 +18,11 @@ public final class TrainSlothNetwork {
             RenameHubPlatformPayload::handleServer
         );
         registrar.playToServer(
+            RenameStationHubPayload.TYPE,
+            RenameStationHubPayload.STREAM_CODEC,
+            RenameStationHubPayload::handleServer
+        );
+        registrar.playToServer(
             EditStellwerkRoutePayload.TYPE,
             EditStellwerkRoutePayload.STREAM_CODEC,
             EditStellwerkRoutePayload::handleServer

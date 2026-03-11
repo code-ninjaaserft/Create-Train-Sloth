@@ -1,7 +1,11 @@
 package dev.elved.createtrainsloth.dispatch;
 
 import com.simibubi.create.content.trains.entity.Train;
+import com.simibubi.create.content.trains.graph.DiscoveredPath;
+import com.simibubi.create.content.trains.graph.EdgePointType;
+import com.simibubi.create.content.trains.schedule.Schedule;
 import com.simibubi.create.content.trains.schedule.ScheduleRuntime;
+import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
@@ -10,6 +14,7 @@ import dev.elved.createtrainsloth.line.LineId;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LineRuntimeState;
 import dev.elved.createtrainsloth.line.TrainLine;
+import dev.elved.createtrainsloth.routing.PlatformAssignmentService;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -26,17 +31,20 @@ public class DispatchController {
     private final LineManager lineManager;
     private final StationStateTracker stationStateTracker;
     private final HeadwayCalculator headwayCalculator;
+    private final PlatformAssignmentService platformAssignmentService;
     private final DebugOverlay debugOverlay;
 
     public DispatchController(
         LineManager lineManager,
         StationStateTracker stationStateTracker,
         HeadwayCalculator headwayCalculator,
+        PlatformAssignmentService platformAssignmentService,
         DebugOverlay debugOverlay
     ) {
         this.lineManager = lineManager;
         this.stationStateTracker = stationStateTracker;
         this.headwayCalculator = headwayCalculator;
+        this.platformAssignmentService = platformAssignmentService;
         this.debugOverlay = debugOverlay;
     }
 
@@ -78,6 +86,10 @@ public class DispatchController {
                 }
 
                 if (!releasedThisTick && !runtimeState.hasPendingDispatch(gameTick)) {
+                    if (needsStellwerkDirectedDeparture(train) && !prepareDeparturePath(level, train, line)) {
+                        hold(train, lineId, "no stellwerk path");
+                        continue;
+                    }
                     runtimeState.setPendingDispatch(train.id, gameTick + DISPATCH_TOKEN_DURATION);
                     releasedThisTick = true;
                     debugOverlay.recordRelease(train.id, lineId, gameTick, headwayTicks);
@@ -214,6 +226,81 @@ public class DispatchController {
 
     private boolean matchesLineStation(TrainLine line, String stationName) {
         return line.matchesStationName(stationName);
+    }
+
+    private boolean needsStellwerkDirectedDeparture(Train train) {
+        if (train.runtime == null) {
+            return true;
+        }
+
+        Schedule schedule = train.runtime.getSchedule();
+        if (schedule == null || schedule.entries == null || schedule.entries.isEmpty()) {
+            return true;
+        }
+
+        int entryIndex = train.runtime.currentEntry;
+        if (entryIndex < 0 || entryIndex >= schedule.entries.size()) {
+            return true;
+        }
+
+        return !(schedule.entries.get(entryIndex).instruction instanceof DestinationInstruction);
+    }
+
+    private boolean prepareDeparturePath(Level level, Train train, TrainLine line) {
+        if (train.graph == null) {
+            return false;
+        }
+
+        GlobalStation currentStation = train.getCurrentStation();
+        DiscoveredPath selectedPath = null;
+
+        if (platformAssignmentService != null) {
+            selectedPath = platformAssignmentService.assignmentForTrain(train.id)
+                .map(assignment -> resolveStationById(train, assignment.stationId()))
+                .filter(station -> station != null && (currentStation == null || !station.id.equals(currentStation.id)))
+                .map(station -> train.navigation.findPathTo(station, TrainSlothConfig.ROUTING.maxSearchCost.get()))
+                .orElse(null);
+        }
+
+        if (selectedPath == null) {
+            List<GlobalStation> targets = new ArrayList<>();
+            for (GlobalStation station : train.graph.getPoints(EdgePointType.STATION)) {
+                if (!line.matchesStation(station)) {
+                    continue;
+                }
+                if (currentStation != null && station.id.equals(currentStation.id)) {
+                    continue;
+                }
+                targets.add(station);
+            }
+
+            if (targets.isEmpty() && currentStation != null && line.matchesStation(currentStation)) {
+                targets.add(currentStation);
+            }
+            if (targets.isEmpty()) {
+                return false;
+            }
+
+            selectedPath = train.navigation.findPathTo(new ArrayList<>(targets), TrainSlothConfig.ROUTING.maxSearchCost.get());
+        }
+
+        if (selectedPath == null || selectedPath.destination == null) {
+            return false;
+        }
+
+        return train.navigation.startNavigation(selectedPath) >= 0D;
+    }
+
+    private GlobalStation resolveStationById(Train train, java.util.UUID stationId) {
+        if (train == null || train.graph == null || stationId == null) {
+            return null;
+        }
+        for (GlobalStation station : train.graph.getPoints(EdgePointType.STATION)) {
+            if (stationId.equals(station.id)) {
+                return station;
+            }
+        }
+        return null;
     }
 
     private record DispatchDecision(boolean hold, String reason) {

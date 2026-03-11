@@ -214,6 +214,42 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
         return syncedSelectedServiceClass.prefix();
     }
 
+    public int selectedLineAssignedTrainCount() {
+        String lineId = selectedLineLabel();
+        if ("-".equals(lineId)) {
+            return 0;
+        }
+
+        int count = 0;
+        for (String assignedLine : syncedAssignments.values()) {
+            if (lineId.equals(assignedLine)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public int selectedLineRecommendedTrainCount() {
+        String lineId = selectedLineLabel();
+        if ("-".equals(lineId)) {
+            return 0;
+        }
+
+        int stationCount = Math.max(1, syncedSelectedLineStations.size());
+        int base = Math.max(1, (int) Math.ceil(stationCount / 2.5D));
+        double classFactor = switch (syncedSelectedServiceClass) {
+            case S -> 1.35D;
+            case IR -> 1.15D;
+            case RE -> 1.0D;
+            case IC -> 0.85D;
+            case ICN -> 0.8D;
+            case ICE -> 0.7D;
+        };
+
+        int recommended = (int) Math.round(base * classFactor);
+        return Math.max(1, Math.min(12, recommended));
+    }
+
     public boolean cycleTrainSelection(int delta) {
         if (syncedTrainIds.isEmpty()) {
             return false;
@@ -404,6 +440,33 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
         }
 
         lineRegistry.markDirty();
+        refreshControlData(level);
+        setChangedAndSync();
+        return true;
+    }
+
+    public boolean deleteRoute(String lineIdRaw) {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+
+        String lineIdValue = lineIdRaw == null ? "" : lineIdRaw.trim();
+        if (lineIdValue.isBlank()) {
+            return false;
+        }
+
+        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
+        if (lineRegistry == null) {
+            return false;
+        }
+
+        boolean removed = lineRegistry.removeLine(new LineId(lineIdValue));
+        if (!removed) {
+            return false;
+        }
+
+        routeServiceByLine.remove(lineIdValue);
+        routeStationsByLine.remove(lineIdValue);
         refreshControlData(level);
         setChangedAndSync();
         return true;

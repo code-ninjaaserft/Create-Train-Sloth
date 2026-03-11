@@ -26,6 +26,7 @@ public record EditStellwerkRoutePayload(
     public static final byte ACTION_MOVE = 2;
     public static final byte ACTION_CREATE = 3;
     public static final byte ACTION_UPDATE_META = 4;
+    public static final byte ACTION_DELETE_ROUTE = 5;
 
     public static final Type<EditStellwerkRoutePayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(CreateTrainSlothMod.MOD_ID, "edit_stellwerk_route")
@@ -74,6 +75,10 @@ public record EditStellwerkRoutePayload(
         return new EditStellwerkRoutePayload(pos, lineId, "", routeName, serviceClass, -1, -1, ACTION_UPDATE_META);
     }
 
+    public static EditStellwerkRoutePayload deleteRoute(BlockPos pos, String lineId) {
+        return new EditStellwerkRoutePayload(pos, lineId, "", "", "", -1, -1, ACTION_DELETE_ROUTE);
+    }
+
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
@@ -115,6 +120,10 @@ public record EditStellwerkRoutePayload(
             }
             if (payload.action == ACTION_UPDATE_META) {
                 interlockingBlockEntity.updateSelectedRouteMeta(payload.routeName, payload.serviceClass);
+                return;
+            }
+            if (payload.action == ACTION_DELETE_ROUTE) {
+                interlockingBlockEntity.deleteRoute(payload.lineId);
             }
         });
     }

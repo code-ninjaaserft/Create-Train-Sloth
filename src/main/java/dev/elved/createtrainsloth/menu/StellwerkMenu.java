@@ -253,6 +253,20 @@ public class StellwerkMenu extends AbstractContainerMenu {
         return blockEntity.selectedServiceClass();
     }
 
+    public int selectedLineAssignedTrainCount() {
+        if (blockEntity == null) {
+            return 0;
+        }
+        return blockEntity.selectedLineAssignedTrainCount();
+    }
+
+    public int selectedLineRecommendedTrainCount() {
+        if (blockEntity == null) {
+            return 0;
+        }
+        return blockEntity.selectedLineRecommendedTrainCount();
+    }
+
     @Nullable
     private static InterlockingBlockEntity resolveBlockEntity(Level level, BlockPos pos) {
         if (level.getBlockEntity(pos) instanceof InterlockingBlockEntity interlockingBlockEntity) {

@@ -3,6 +3,7 @@ package dev.elved.createtrainsloth.block;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import dev.elved.createtrainsloth.block.entity.StationHubBlockEntity;
+import dev.elved.createtrainsloth.item.StationLinkBlockItem;
 import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
 import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
@@ -98,6 +99,10 @@ public class StationHubBlock extends BaseEntityBlock implements IWrenchable {
         }
 
         if (CREATE_WRENCH.equals(BuiltInRegistries.ITEM.getKey(stack.getItem()))) {
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+        }
+
+        if (stack.getItem() instanceof StationLinkBlockItem) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 

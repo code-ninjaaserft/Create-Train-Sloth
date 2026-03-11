@@ -5,6 +5,7 @@ import dev.elved.createtrainsloth.block.InterlockingBlock;
 import dev.elved.createtrainsloth.block.StationLinkBlock;
 import dev.elved.createtrainsloth.block.StationHubBlock;
 import dev.elved.createtrainsloth.block.entity.InterlockingBlockEntity;
+import dev.elved.createtrainsloth.block.entity.StationLinkBlockEntity;
 import dev.elved.createtrainsloth.block.entity.StationHubBlockEntity;
 import dev.elved.createtrainsloth.item.StationLinkBlockItem;
 import dev.elved.createtrainsloth.menu.StationHubMenu;
@@ -74,6 +75,12 @@ public final class TrainSlothRegistries {
         BLOCK_ENTITY_TYPES.register(
             "station_hub_block",
             () -> BlockEntityType.Builder.of(StationHubBlockEntity::new, STATION_HUB_BLOCK.get()).build(null)
+        );
+
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<StationLinkBlockEntity>> STATION_LINK_BLOCK_ENTITY =
+        BLOCK_ENTITY_TYPES.register(
+            "station_link",
+            () -> BlockEntityType.Builder.of(StationLinkBlockEntity::new, STATION_LINK_BLOCK.get()).build(null)
         );
 
     public static final DeferredHolder<MenuType<?>, MenuType<StellwerkMenu>> STELLWERK_MENU =

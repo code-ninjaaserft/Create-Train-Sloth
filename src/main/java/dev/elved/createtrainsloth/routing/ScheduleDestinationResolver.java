@@ -6,6 +6,8 @@ import com.simibubi.create.content.trains.graph.EdgePointType;
 import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
+import dev.elved.createtrainsloth.line.LineManager;
+import dev.elved.createtrainsloth.line.TrainLine;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayList;
@@ -24,13 +26,16 @@ public class ScheduleDestinationResolver {
     private static final Pattern TRAILING_NUMBER_PATTERN = Pattern.compile("^(.*?)(?:\\s+\\d+)?$");
     private final ScheduleAlternativeResolver scheduleAlternativeResolver;
     private final StationHubRegistry stationHubRegistry;
+    private final LineManager lineManager;
 
     public ScheduleDestinationResolver(
         ScheduleAlternativeResolver scheduleAlternativeResolver,
-        StationHubRegistry stationHubRegistry
+        StationHubRegistry stationHubRegistry,
+        LineManager lineManager
     ) {
         this.scheduleAlternativeResolver = scheduleAlternativeResolver;
         this.stationHubRegistry = stationHubRegistry;
+        this.lineManager = lineManager;
     }
 
     public Optional<DestinationContext> resolve(Train train) {
@@ -41,6 +46,9 @@ public class ScheduleDestinationResolver {
         List<GlobalStation> allStations = sortedStations(train);
         Optional<DestinationInstruction> destinationInstruction = scheduleAlternativeResolver.resolveCurrentMainDestination(train);
         Optional<MainDestinationResolution> mainResolution = resolveMainDestination(train, allStations, destinationInstruction);
+        if (mainResolution.isEmpty()) {
+            mainResolution = resolveLineDestination(train, allStations);
+        }
         if (mainResolution.isEmpty()) {
             return Optional.empty();
         }
@@ -123,6 +131,51 @@ public class ScheduleDestinationResolver {
         }
 
         return Optional.of(new MainDestinationResolution(primaryDestination, List.copyOf(mainCandidates), sourceFilter));
+    }
+
+    private Optional<MainDestinationResolution> resolveLineDestination(Train train, List<GlobalStation> allStations) {
+        if (lineManager == null) {
+            return Optional.empty();
+        }
+
+        Optional<TrainLine> optionalLine = lineManager.lineForTrain(train);
+        if (optionalLine.isEmpty()) {
+            return Optional.empty();
+        }
+
+        TrainLine line = optionalLine.get();
+        List<GlobalStation> lineStations = new ArrayList<>();
+        for (GlobalStation station : allStations) {
+            if (line.matchesStation(station)) {
+                lineStations.add(station);
+            }
+        }
+        if (lineStations.isEmpty()) {
+            return Optional.empty();
+        }
+
+        GlobalStation currentStation = train.getCurrentStation();
+        UUID currentStationId = currentStation == null ? null : currentStation.id;
+
+        GlobalStation primary = null;
+        if (!lineStations.isEmpty()) {
+            List<GlobalStation> preferredStations = lineStations.stream()
+                .filter(station -> currentStationId == null || !station.id.equals(currentStationId))
+                .toList();
+            List<GlobalStation> searchPool = preferredStations.isEmpty() ? lineStations : preferredStations;
+            DiscoveredPath bestPath = train.navigation.findPathTo(new ArrayList<>(searchPool), TrainSlothConfig.ROUTING.maxSearchCost.get());
+            if (bestPath != null && bestPath.destination != null) {
+                primary = bestPath.destination;
+            } else if (!searchPool.isEmpty()) {
+                primary = searchPool.get(0);
+            }
+        }
+
+        if (primary == null) {
+            primary = lineStations.get(0);
+        }
+
+        return Optional.of(new MainDestinationResolution(primary, List.copyOf(lineStations), "line:" + line.id().value()));
     }
 
     private ResolvedFilter resolveMainInstructionFilter(List<GlobalStation> allStations, DestinationInstruction instruction) {
@@ -302,4 +355,3 @@ public class ScheduleDestinationResolver {
     ) {
     }
 }
-

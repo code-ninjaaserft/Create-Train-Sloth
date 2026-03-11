@@ -3,23 +3,31 @@ package dev.elved.createtrainsloth.block;
 import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.content.trains.station.StationBlock;
+import dev.elved.createtrainsloth.CreateTrainSlothMod;
+import dev.elved.createtrainsloth.block.entity.StationLinkBlockEntity;
+import dev.elved.createtrainsloth.station.StationHubId;
+import dev.elved.createtrainsloth.station.StationLinkKeyUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.DirectionalBlock;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.Nullable;
 
-public class StationLinkBlock extends DirectionalBlock implements IWrenchable {
+public class StationLinkBlock extends BaseEntityBlock implements IWrenchable {
 
     public static final DirectionProperty FACING = BlockStateProperties.FACING;
     public static final MapCodec<StationLinkBlock> CODEC = simpleCodec(StationLinkBlock::new);
@@ -37,7 +45,7 @@ public class StationLinkBlock extends DirectionalBlock implements IWrenchable {
     }
 
     @Override
-    protected MapCodec<? extends DirectionalBlock> codec() {
+    protected MapCodec<? extends BaseEntityBlock> codec() {
         return CODEC;
     }
 
@@ -49,6 +57,12 @@ public class StationLinkBlock extends DirectionalBlock implements IWrenchable {
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<net.minecraft.world.level.block.Block, BlockState> builder) {
         builder.add(FACING);
+    }
+
+    @Nullable
+    @Override
+    public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+        return new StationLinkBlockEntity(pos, state);
     }
 
     @Override
@@ -73,6 +87,30 @@ public class StationLinkBlock extends DirectionalBlock implements IWrenchable {
     @Override
     protected BlockState mirror(BlockState state, Mirror mirror) {
         return state.setValue(FACING, mirror.mirror(state.getValue(FACING)));
+    }
+
+    @Override
+    protected void onRemove(
+        BlockState state,
+        Level level,
+        BlockPos pos,
+        BlockState newState,
+        boolean movedByPiston
+    ) {
+        if (!state.is(newState.getBlock()) && !level.isClientSide()) {
+            if (level.getBlockEntity(pos) instanceof StationLinkBlockEntity stationLinkBlockEntity
+                && stationLinkBlockEntity.hasBinding()
+                && CreateTrainSlothMod.runtime().stationHubRegistry() != null) {
+                StationHubId hubId = new StationHubId(stationLinkBlockEntity.hubId());
+                String stationName = stationLinkBlockEntity.stationName();
+                String linkKey = StationLinkKeyUtil.encode(level.dimension().location(), pos);
+                CreateTrainSlothMod.runtime().stationHubRegistry().unregisterStationLink(hubId, stationName, linkKey);
+                if (!CreateTrainSlothMod.runtime().stationHubRegistry().hasStationLinks(hubId, stationName)) {
+                    CreateTrainSlothMod.runtime().stationHubRegistry().removePlatform(hubId, stationName);
+                }
+            }
+        }
+        super.onRemove(state, level, pos, newState, movedByPiston);
     }
 
     @Override

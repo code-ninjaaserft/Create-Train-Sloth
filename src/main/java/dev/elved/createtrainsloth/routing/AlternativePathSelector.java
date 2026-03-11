@@ -53,7 +53,7 @@ public class AlternativePathSelector {
         this.routePreferenceResolver = routePreferenceResolver;
         this.reservationAwarenessService = reservationAwarenessService;
         this.scheduleAlternativeResolver = scheduleAlternativeResolver;
-        this.scheduleDestinationResolver = new ScheduleDestinationResolver(scheduleAlternativeResolver, stationHubRegistry);
+        this.scheduleDestinationResolver = new ScheduleDestinationResolver(scheduleAlternativeResolver, stationHubRegistry, lineManager);
         this.platformAssignmentService = platformAssignmentService;
         this.interlockingControlService = interlockingControlService;
         this.stellwerkControlModeService = stellwerkControlModeService;

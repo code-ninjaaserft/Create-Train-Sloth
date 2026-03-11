@@ -434,7 +434,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         lineNextButton.active = hasLines;
         assignTrainButton.active = hasLines && hasTrains;
         unassignTrainButton.active = hasTrains && !"-".equals(menu.selectedAssignmentLabel());
-        routeCreatorButton.active = hasLines;
+        routeCreatorButton.active = true;
     }
 
     private Component autoRoutingText() {

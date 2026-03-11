@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class StationHubRegistry {
 
@@ -41,6 +42,23 @@ public class StationHubRegistry {
         if (removed == null) {
             return false;
         }
+        savedData.setDirty();
+        return true;
+    }
+
+    public boolean renameHub(StationHubId hubId, String newDisplayName) {
+        Optional<StationHub> hub = findHub(hubId);
+        if (hub.isEmpty()) {
+            return false;
+        }
+        String normalized = newDisplayName == null ? "" : newDisplayName.trim();
+        if (normalized.isBlank()) {
+            return false;
+        }
+        if (hub.get().displayName().equals(normalized)) {
+            return false;
+        }
+        hub.get().setDisplayName(normalized);
         savedData.setDirty();
         return true;
     }
@@ -95,6 +113,53 @@ public class StationHubRegistry {
         return changed;
     }
 
+    public Set<String> removePlatformAndCollectLinkKeys(StationHubId hubId, String stationName) {
+        Optional<StationHub> hub = findHub(hubId);
+        if (hub.isEmpty()) {
+            return Set.of();
+        }
+
+        StationHub value = hub.get();
+        Set<String> links = value.removeStationLinkKeys(stationName);
+        boolean removed = value.removePlatformStationName(stationName);
+        if (removed || !links.isEmpty()) {
+            savedData.setDirty();
+        }
+        return removed ? links : Set.of();
+    }
+
+    public boolean hasStationLinks(StationHubId hubId, String stationName) {
+        Optional<StationHub> hub = findHub(hubId);
+        if (hub.isEmpty()) {
+            return false;
+        }
+        return !hub.get().stationLinkKeys(stationName).isEmpty();
+    }
+
+    public boolean registerStationLink(StationHubId hubId, String stationName, String linkKey) {
+        Optional<StationHub> hub = findHub(hubId);
+        if (hub.isEmpty()) {
+            return false;
+        }
+        boolean changed = hub.get().addStationLinkKey(stationName, linkKey);
+        if (changed) {
+            savedData.setDirty();
+        }
+        return changed;
+    }
+
+    public boolean unregisterStationLink(StationHubId hubId, String stationName, String linkKey) {
+        Optional<StationHub> hub = findHub(hubId);
+        if (hub.isEmpty()) {
+            return false;
+        }
+        boolean changed = hub.get().removeStationLinkKey(stationName, linkKey);
+        if (changed) {
+            savedData.setDirty();
+        }
+        return changed;
+    }
+
     public void markDirty() {
         savedData.setDirty();
     }
@@ -106,4 +171,3 @@ public class StationHubRegistry {
         return value.trim().toLowerCase(Locale.ROOT);
     }
 }
-

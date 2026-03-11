@@ -3,8 +3,10 @@ package dev.elved.createtrainsloth.station;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import net.minecraft.nbt.CompoundTag;
@@ -17,11 +19,13 @@ public class StationHub {
     private final StationHubId id;
     private String displayName;
     private final Set<String> platformStationNames;
+    private final Map<String, Set<String>> linkKeysByStation;
 
     public StationHub(StationHubId id, String displayName) {
         this.id = id;
         this.displayName = displayName;
         this.platformStationNames = new LinkedHashSet<>();
+        this.linkKeysByStation = new LinkedHashMap<>();
     }
 
     public StationHubId id() {
@@ -49,7 +53,46 @@ public class StationHub {
     }
 
     public boolean removePlatformStationName(String stationName) {
-        return platformStationNames.remove(normalizeStation(stationName));
+        String normalized = normalizeStation(stationName);
+        boolean removed = platformStationNames.remove(normalized);
+        if (removed) {
+            linkKeysByStation.remove(normalized);
+        }
+        return removed;
+    }
+
+    public boolean addStationLinkKey(String stationName, String linkKey) {
+        String normalizedStation = normalizeStation(stationName);
+        if (normalizedStation.isBlank() || linkKey == null || linkKey.isBlank()) {
+            return false;
+        }
+        return linkKeysByStation.computeIfAbsent(normalizedStation, ignored -> new LinkedHashSet<>())
+            .add(linkKey);
+    }
+
+    public boolean removeStationLinkKey(String stationName, String linkKey) {
+        String normalizedStation = normalizeStation(stationName);
+        Set<String> keys = linkKeysByStation.get(normalizedStation);
+        if (keys == null || linkKey == null || linkKey.isBlank()) {
+            return false;
+        }
+        boolean removed = keys.remove(linkKey);
+        if (keys.isEmpty()) {
+            linkKeysByStation.remove(normalizedStation);
+        }
+        return removed;
+    }
+
+    public Set<String> stationLinkKeys(String stationName) {
+        String normalizedStation = normalizeStation(stationName);
+        Set<String> keys = linkKeysByStation.get(normalizedStation);
+        return keys == null ? Set.of() : Set.copyOf(keys);
+    }
+
+    public Set<String> removeStationLinkKeys(String stationName) {
+        String normalizedStation = normalizeStation(stationName);
+        Set<String> removed = linkKeysByStation.remove(normalizedStation);
+        return removed == null ? Set.of() : Set.copyOf(removed);
     }
 
     public boolean matchesStation(GlobalStation station) {
@@ -89,6 +132,19 @@ public class StationHub {
             platforms.add(StringTag.valueOf(platform));
         }
         tag.put("Platforms", platforms);
+
+        ListTag links = new ListTag();
+        for (Map.Entry<String, Set<String>> entry : linkKeysByStation.entrySet()) {
+            CompoundTag stationLinks = new CompoundTag();
+            stationLinks.putString("Station", entry.getKey());
+            ListTag linkKeys = new ListTag();
+            for (String linkKey : entry.getValue()) {
+                linkKeys.add(StringTag.valueOf(linkKey));
+            }
+            stationLinks.put("LinkKeys", linkKeys);
+            links.add(stationLinks);
+        }
+        tag.put("StationLinks", links);
         return tag;
     }
 
@@ -101,7 +157,18 @@ public class StationHub {
         for (Tag platformTag : platformTags) {
             hub.addPlatformStationName(platformTag.getAsString());
         }
+
+        ListTag stationLinks = tag.getList("StationLinks", Tag.TAG_COMPOUND);
+        for (Tag stationLinkTag : stationLinks) {
+            CompoundTag stationLink = (CompoundTag) stationLinkTag;
+            if (!stationLink.contains("Station", Tag.TAG_STRING)) {
+                continue;
+            }
+            String station = stationLink.getString("Station");
+            for (Tag linkKey : stationLink.getList("LinkKeys", Tag.TAG_STRING)) {
+                hub.addStationLinkKey(station, linkKey.getAsString());
+            }
+        }
         return hub;
     }
 }
-
