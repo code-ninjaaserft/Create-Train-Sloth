@@ -6,14 +6,17 @@ import dev.elved.createtrainsloth.debug.DebugOverlay;
 import dev.elved.createtrainsloth.dispatch.DispatchController;
 import dev.elved.createtrainsloth.dispatch.HeadwayCalculator;
 import dev.elved.createtrainsloth.dispatch.StationStateTracker;
+import dev.elved.createtrainsloth.line.LinePlanningService;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LineRegistry;
 import dev.elved.createtrainsloth.line.ScheduleLineSyncService;
 import dev.elved.createtrainsloth.interlocking.StellwerkControlModeService;
 import dev.elved.createtrainsloth.interlocking.InterlockingControlService;
 import dev.elved.createtrainsloth.routing.AlternativePathSelector;
+import dev.elved.createtrainsloth.routing.DepotRuntimeService;
 import dev.elved.createtrainsloth.routing.PlatformAssignmentService;
 import dev.elved.createtrainsloth.routing.ReservationAwarenessService;
+import dev.elved.createtrainsloth.routing.RoutingAuthorityService;
 import dev.elved.createtrainsloth.routing.RoutePreferenceResolver;
 import dev.elved.createtrainsloth.routing.ScheduleAlternativeResolver;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
@@ -26,6 +29,7 @@ public class TrainSlothRuntime {
     private LineRegistry lineRegistry;
     private StationHubRegistry stationHubRegistry;
     private LineManager lineManager;
+    private LinePlanningService linePlanningService;
     private ScheduleLineSyncService scheduleLineSyncService;
     private StationStateTracker stationStateTracker;
     private HeadwayCalculator headwayCalculator;
@@ -37,6 +41,8 @@ public class TrainSlothRuntime {
     private InterlockingControlService interlockingControlService;
     private StellwerkControlModeService stellwerkControlModeService;
     private AlternativePathSelector alternativePathSelector;
+    private DepotRuntimeService depotRuntimeService;
+    private RoutingAuthorityService routingAuthorityService;
     private DebugOverlay debugOverlay;
     private final TrainSlothCommands commands = new TrainSlothCommands();
 
@@ -50,6 +56,7 @@ public class TrainSlothRuntime {
         lineRegistry = new LineRegistry(savedData);
         stationHubRegistry = new StationHubRegistry(savedData);
         lineManager = new LineManager(lineRegistry);
+        linePlanningService = new LinePlanningService();
         scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry, stationHubRegistry);
         stationStateTracker = new StationStateTracker();
         headwayCalculator = new HeadwayCalculator();
@@ -83,6 +90,26 @@ public class TrainSlothRuntime {
             debugOverlay,
             stationHubRegistry
         );
+        depotRuntimeService = new DepotRuntimeService(
+            lineRegistry,
+            lineManager,
+            linePlanningService,
+            stationHubRegistry,
+            debugOverlay
+        );
+        routingAuthorityService = new RoutingAuthorityService(
+            lineManager,
+            scheduleLineSyncService,
+            dispatchController,
+            alternativePathSelector,
+            platformAssignmentService,
+            reservationAwarenessService,
+            scheduleAlternativeResolver,
+            stationHubRegistry,
+            interlockingControlService,
+            depotRuntimeService,
+            debugOverlay
+        );
         commands.bind(lineRegistry, lineManager, stationHubRegistry, debugOverlay, interlockingControlService);
     }
 
@@ -92,6 +119,7 @@ public class TrainSlothRuntime {
         lineRegistry = null;
         stationHubRegistry = null;
         lineManager = null;
+        linePlanningService = null;
         scheduleLineSyncService = null;
         stationStateTracker = null;
         headwayCalculator = null;
@@ -103,12 +131,18 @@ public class TrainSlothRuntime {
         interlockingControlService = null;
         stellwerkControlModeService = null;
         alternativePathSelector = null;
+        depotRuntimeService = null;
+        routingAuthorityService = null;
         debugOverlay = null;
         commands.clearBindings();
     }
 
     public boolean ready() {
-        return server != null && lineManager != null && dispatchController != null && alternativePathSelector != null;
+        return server != null
+            && lineManager != null
+            && dispatchController != null
+            && alternativePathSelector != null
+            && routingAuthorityService != null;
     }
 
     public MinecraftServer server() {
@@ -125,6 +159,10 @@ public class TrainSlothRuntime {
 
     public AlternativePathSelector alternativePathSelector() {
         return alternativePathSelector;
+    }
+
+    public RoutingAuthorityService routingAuthorityService() {
+        return routingAuthorityService;
     }
 
     public ScheduleAlternativeResolver scheduleAlternativeResolver() {
@@ -153,6 +191,10 @@ public class TrainSlothRuntime {
 
     public LineManager lineManager() {
         return lineManager;
+    }
+
+    public LinePlanningService linePlanningService() {
+        return linePlanningService;
     }
 
     public TrainSlothCommands commands() {

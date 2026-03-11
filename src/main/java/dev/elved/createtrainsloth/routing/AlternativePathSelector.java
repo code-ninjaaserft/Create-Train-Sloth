@@ -244,6 +244,7 @@ public class AlternativePathSelector {
                 primaryPath,
                 candidates,
                 plannedAssignment.orElse(null),
+                lineManager.serviceClassForTrain(train.id),
                 routeState,
                 gameTick
             );
@@ -275,6 +276,7 @@ public class AlternativePathSelector {
                         + " altEntry=" + (alternativeEntry == null ? "-" : alternativeEntry)
                         + " proactive=" + proactiveAssignedSwitch
                         + " filter=" + destinationContext.get().sourceFilter()
+                        + " " + resolution.diagnostics()
                 );
             }
         }

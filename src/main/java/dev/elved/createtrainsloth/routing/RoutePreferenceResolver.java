@@ -4,6 +4,7 @@ import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.graph.DiscoveredPath;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
 import dev.elved.createtrainsloth.line.TrainLine;
+import dev.elved.createtrainsloth.line.TrainServiceClass;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +25,7 @@ public class RoutePreferenceResolver {
         DiscoveredPath primaryPath,
         List<DiscoveredPath> candidates,
         PlatformAssignmentService.PlannedPlatformAssignment plannedAssignment,
+        TrainServiceClass serviceClass,
         AlternativePathSelector.TrainRouteState state,
         long gameTick
     ) {
@@ -36,6 +38,12 @@ public class RoutePreferenceResolver {
         String primarySignature = AlternativePathSelector.pathSignature(primaryPath);
         String currentSignature = state.currentSignature() == null ? primarySignature : state.currentSignature();
         UUID primaryDestinationId = primaryPath.destination != null ? primaryPath.destination.id : null;
+        TrainServiceClass resolvedServiceClass = serviceClass == null ? TrainServiceClass.RE : serviceClass;
+        int occupiedPenaltyUnit = occupiedSignalPenalty(resolvedServiceClass);
+        int conflictPenaltyUnit = conflictPenalty(resolvedServiceClass);
+        String diagnostics = "svc=" + resolvedServiceClass.name()
+            + " occPenaltyUnit=" + occupiedPenaltyUnit
+            + " conflictPenaltyUnit=" + conflictPenaltyUnit;
 
         for (DiscoveredPath candidate : candidates) {
             String signature = AlternativePathSelector.pathSignature(candidate);
@@ -48,7 +56,10 @@ public class RoutePreferenceResolver {
                 plannedAssignment,
                 currentSignature,
                 state,
-                gameTick
+                gameTick,
+                resolvedServiceClass,
+                occupiedPenaltyUnit,
+                conflictPenaltyUnit
             );
             scoresBySignature.put(signature, score);
             pathBySignature.putIfAbsent(signature, candidate);
@@ -69,18 +80,18 @@ public class RoutePreferenceResolver {
             && gameTick - state.lastSwitchTick() < line.settings().resolveRouteSwitchCooldownTicks();
 
         if (cooldownActive) {
-            return RouteResolution.waitOnly();
+            return RouteResolution.waitOnly(diagnostics + " cooldown_active=true");
         }
 
         if (best.getKey().equals(currentSignature)) {
-            return RouteResolution.keep(pathBySignature.get(best.getKey()), best.getKey(), best.getValue());
+            return RouteResolution.keep(pathBySignature.get(best.getKey()), best.getKey(), best.getValue(), diagnostics);
         }
 
         if (best.getValue() < currentScore + threshold) {
-            return RouteResolution.keep(pathBySignature.get(currentSignature), currentSignature, currentScore);
+            return RouteResolution.keep(pathBySignature.get(currentSignature), currentSignature, currentScore, diagnostics);
         }
 
-        return RouteResolution.switchTo(pathBySignature.get(best.getKey()), best.getKey(), best.getValue());
+        return RouteResolution.switchTo(pathBySignature.get(best.getKey()), best.getKey(), best.getValue(), diagnostics);
     }
 
     private int scorePath(
@@ -92,7 +103,10 @@ public class RoutePreferenceResolver {
         PlatformAssignmentService.PlannedPlatformAssignment plannedAssignment,
         String currentSignature,
         AlternativePathSelector.TrainRouteState state,
-        long gameTick
+        long gameTick,
+        TrainServiceClass serviceClass,
+        int occupiedPenaltyUnit,
+        int conflictPenaltyUnit
     ) {
         String signature = AlternativePathSelector.pathSignature(path);
 
@@ -122,10 +136,10 @@ public class RoutePreferenceResolver {
         }
 
         int occupied = reservationAwarenessService.countOccupiedSignals(train, path);
-        score -= occupied * 700;
+        score -= occupied * occupiedPenaltyUnit;
 
         int conflicts = reservationAwarenessService.estimateConflictComplexity(path);
-        score -= conflicts * 60;
+        score -= conflicts * conflictPenaltyUnit;
 
         if (state.currentSignature() != null && signature.equals(state.currentSignature())) {
             score += 180;
@@ -174,18 +188,39 @@ public class RoutePreferenceResolver {
         return score;
     }
 
-    public record RouteResolution(boolean shouldSwitch, boolean keepCurrent, DiscoveredPath selectedPath, String signature, int score) {
+    private int occupiedSignalPenalty(TrainServiceClass serviceClass) {
+        int highPriorityReduction = Math.max(0, serviceClass.priorityWeight() - TrainServiceClass.RE.priorityWeight());
+        return Math.max(380, 700 - highPriorityReduction * 5);
+    }
+
+    private int conflictPenalty(TrainServiceClass serviceClass) {
+        int highPriorityReduction = Math.max(0, serviceClass.priorityWeight() - TrainServiceClass.RE.priorityWeight());
+        return Math.max(32, 60 - highPriorityReduction / 2);
+    }
+
+    public record RouteResolution(
+        boolean shouldSwitch,
+        boolean keepCurrent,
+        DiscoveredPath selectedPath,
+        String signature,
+        int score,
+        String diagnostics
+    ) {
 
         public static RouteResolution waitOnly() {
-            return new RouteResolution(false, false, null, "", Integer.MIN_VALUE);
+            return new RouteResolution(false, false, null, "", Integer.MIN_VALUE, "");
         }
 
-        public static RouteResolution keep(DiscoveredPath path, String signature, int score) {
-            return new RouteResolution(false, true, path, signature, score);
+        public static RouteResolution waitOnly(String diagnostics) {
+            return new RouteResolution(false, false, null, "", Integer.MIN_VALUE, diagnostics);
         }
 
-        public static RouteResolution switchTo(DiscoveredPath path, String signature, int score) {
-            return new RouteResolution(true, false, path, signature, score);
+        public static RouteResolution keep(DiscoveredPath path, String signature, int score, String diagnostics) {
+            return new RouteResolution(false, true, path, signature, score, diagnostics);
+        }
+
+        public static RouteResolution switchTo(DiscoveredPath path, String signature, int score, String diagnostics) {
+            return new RouteResolution(true, false, path, signature, score, diagnostics);
         }
     }
 }

@@ -8,6 +8,11 @@ import com.simibubi.create.content.trains.graph.EdgePointType;
 import com.simibubi.create.content.trains.schedule.ScheduleRuntime;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
+import dev.elved.createtrainsloth.debug.DebugOverlay;
+import dev.elved.createtrainsloth.line.LineId;
+import dev.elved.createtrainsloth.routing.RoutingAuthorityService;
+import dev.elved.createtrainsloth.routing.TrainRoutingRequest;
+import dev.elved.createtrainsloth.routing.TrainRoutingResponse;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayList;
@@ -25,6 +30,8 @@ public class HubDestinationInstruction extends DestinationInstruction {
         CreateTrainSlothMod.MOD_ID,
         "hub_destination"
     );
+    private static final String STAGE_REQUEST_CREATED = "REQUEST_CREATED";
+    private static final String STAGE_RESPONSE_APPLIED = "RESPONSE_APPLIED";
 
     @Override
     public ResourceLocation getId() {
@@ -50,6 +57,63 @@ public class HubDestinationInstruction extends DestinationInstruction {
 
         if (!train.hasForwardConductor() && !train.hasBackwardConductor()) {
             train.status.missingConductor();
+            runtime.startCooldown();
+            return null;
+        }
+
+        RoutingAuthorityService routingAuthorityService = CreateTrainSlothMod.runtime().routingAuthorityService();
+        if (routingAuthorityService != null) {
+            LineId lineId = CreateTrainSlothMod.runtime().lineManager() == null
+                ? null
+                : CreateTrainSlothMod.runtime().lineManager().lineForTrain(train).map(line -> line.id()).orElse(null);
+            String currentLocation = train.getCurrentStation() == null ? null : train.getCurrentStation().name;
+            String correlationId = "hub-" + Long.toString(level.getGameTime(), 36) + "-" + train.id.toString().substring(0, 6);
+            TrainRoutingRequest request = TrainRoutingRequest.create(
+                correlationId,
+                train.id,
+                lineId,
+                currentLocation,
+                getFilter(),
+                "hub_destination_instruction"
+            );
+
+            DebugOverlay debugOverlay = CreateTrainSlothMod.runtime().debugOverlay();
+            if (debugOverlay != null) {
+                debugOverlay.recordRouterStage(
+                    train.id,
+                    lineId,
+                    request.correlationId(),
+                    STAGE_REQUEST_CREATED,
+                    "destination=" + request.requestedDestination()
+                );
+            }
+
+            TrainRoutingResponse response = routingAuthorityService.requestRoute(level, train, request);
+            if (debugOverlay != null) {
+                String detail = "status=" + response.status()
+                    + " reason=" + (response.reason() == null ? "-" : response.reason())
+                    + " platform=" + (response.assignedPlatform() == null ? "-" : response.assignedPlatform());
+                debugOverlay.recordRouterStage(train.id, lineId, response.correlationId(), STAGE_RESPONSE_APPLIED, detail);
+                if (!response.successful()) {
+                    debugOverlay.recordRouterBreakpoint(
+                        train.id,
+                        lineId,
+                        response.correlationId(),
+                        STAGE_RESPONSE_APPLIED,
+                        response.reason() == null ? response.status() : response.reason()
+                    );
+                }
+            }
+
+            if (response.hasPath()) {
+                return response.path();
+            }
+
+            if (TrainRoutingResponse.STATUS_NO_DESTINATION_MATCH.equals(response.status())) {
+                train.status.failedNavigationNoTarget(getFilter());
+            } else {
+                train.status.failedNavigation();
+            }
             runtime.startCooldown();
             return null;
         }

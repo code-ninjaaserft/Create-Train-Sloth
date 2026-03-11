@@ -90,7 +90,39 @@ public class ScheduleDestinationResolver {
                 primaryDestination,
                 List.copyOf(candidateById.values()),
                 Map.copyOf(alternativeEntryByStation),
-                sourceFilter
+                sourceFilter,
+                mainResolution.get().destinationHubId()
+            )
+        );
+    }
+
+    public Optional<DestinationContext> resolveForFilter(Train train, String filter) {
+        if (train == null || train.graph == null || filter == null || filter.isBlank()) {
+            return Optional.empty();
+        }
+
+        List<GlobalStation> allStations = sortedStations(train);
+        List<GlobalStation> matchedStations = resolveStationsForFilter(allStations, filter);
+        if (matchedStations.isEmpty()) {
+            return Optional.empty();
+        }
+
+        DiscoveredPath bestPath = train.navigation.findPathTo(new ArrayList<>(matchedStations), TrainSlothConfig.ROUTING.maxSearchCost.get());
+        GlobalStation primaryDestination = bestPath != null && bestPath.destination != null
+            ? bestPath.destination
+            : matchedStations.get(0);
+
+        String destinationHubId = resolveHubForFilter(filter)
+            .map(hub -> hub.id().value())
+            .orElse(null);
+
+        return Optional.of(
+            new DestinationContext(
+                primaryDestination,
+                List.copyOf(matchedStations),
+                Map.of(),
+                filter,
+                destinationHubId
             )
         );
     }
@@ -102,12 +134,14 @@ public class ScheduleDestinationResolver {
     ) {
         List<GlobalStation> mainCandidates = List.of();
         String sourceFilter = train.navigation.destination != null ? train.navigation.destination.name : "<none>";
+        String destinationHubId = null;
 
         if (destinationInstruction.isPresent()) {
             DestinationInstruction instruction = destinationInstruction.get();
             ResolvedFilter resolved = resolveMainInstructionFilter(allStations, instruction);
             mainCandidates = resolved.stations();
             sourceFilter = resolved.source();
+            destinationHubId = resolved.destinationHubId();
         }
 
         GlobalStation primaryDestination;
@@ -130,7 +164,7 @@ public class ScheduleDestinationResolver {
             mainCandidates = List.of(primaryDestination);
         }
 
-        return Optional.of(new MainDestinationResolution(primaryDestination, List.copyOf(mainCandidates), sourceFilter));
+        return Optional.of(new MainDestinationResolution(primaryDestination, List.copyOf(mainCandidates), sourceFilter, destinationHubId));
     }
 
     private Optional<MainDestinationResolution> resolveLineDestination(Train train, List<GlobalStation> allStations) {
@@ -175,7 +209,7 @@ public class ScheduleDestinationResolver {
             primary = lineStations.get(0);
         }
 
-        return Optional.of(new MainDestinationResolution(primary, List.copyOf(lineStations), "line:" + line.id().value()));
+        return Optional.of(new MainDestinationResolution(primary, List.copyOf(lineStations), "line:" + line.id().value(), null));
     }
 
     private ResolvedFilter resolveMainInstructionFilter(List<GlobalStation> allStations, DestinationInstruction instruction) {
@@ -184,12 +218,12 @@ public class ScheduleDestinationResolver {
         if (hub.isPresent()) {
             List<GlobalStation> hubStations = resolveStationsForHub(allStations, hub.get());
             if (!hubStations.isEmpty()) {
-                return new ResolvedFilter(hubStations, "hub:" + hub.get().id().value());
+                return new ResolvedFilter(hubStations, "hub:" + hub.get().id().value(), hub.get().id().value());
             }
         }
 
         List<GlobalStation> matched = matchByRegex(allStations, instruction.getFilterForRegex());
-        return new ResolvedFilter(matched, filter);
+        return new ResolvedFilter(matched, filter, null);
     }
 
     private List<GlobalStation> resolveStationsForFilter(List<GlobalStation> allStations, String filter) {
@@ -341,17 +375,19 @@ public class ScheduleDestinationResolver {
         GlobalStation primaryDestination,
         List<GlobalStation> candidateStations,
         Map<UUID, Integer> alternativeEntryByStation,
-        String sourceFilter
+        String sourceFilter,
+        String destinationHubId
     ) {
     }
 
-    private record ResolvedFilter(List<GlobalStation> stations, String source) {
+    private record ResolvedFilter(List<GlobalStation> stations, String source, String destinationHubId) {
     }
 
     private record MainDestinationResolution(
         GlobalStation primaryDestination,
         List<GlobalStation> mainCandidates,
-        String sourceFilter
+        String sourceFilter,
+        String destinationHubId
     ) {
     }
 }

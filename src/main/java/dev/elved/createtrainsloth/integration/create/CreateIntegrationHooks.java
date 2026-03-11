@@ -59,12 +59,7 @@ public class CreateIntegrationHooks {
         }
 
         List<Train> trains = List.copyOf(Create.RAILWAYS.trains.values());
-        runtime.interlockingControlService().captureTick(level, trains);
-        runtime.scheduleAlternativeResolver().restoreMainDestinationOverridesAfterArrival(trains);
-        runtime.scheduleAlternativeResolver().rebindMainConditionsAfterAlternativeArrival(trains);
-        runtime.scheduleAlternativeResolver().advancePastAlternativeEntries(trains);
-        runtime.platformAssignmentService().plan(level, trains);
-        runtime.alternativePathSelector().preRailwayTick(level, trains);
+        runtime.routingAuthorityService().onLevelTickStart(level, trains);
     }
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
@@ -80,8 +75,7 @@ public class CreateIntegrationHooks {
         }
 
         List<Train> trains = List.copyOf(Create.RAILWAYS.trains.values());
-        runtime.scheduleLineSyncService().syncFromSchedules(trains);
-        runtime.dispatchController().preRailwayTick(level, trains);
+        runtime.routingAuthorityService().onLevelTickMid(level, trains);
 
         // TODO(Create integration): If upstream Create exposes train pre-departure extension hooks,
         // replace cooldown-based holding with explicit schedule departure callbacks.
@@ -100,8 +94,7 @@ public class CreateIntegrationHooks {
         }
 
         List<Train> trains = List.copyOf(Create.RAILWAYS.trains.values());
-        runtime.dispatchController().postRailwayTick(level, trains);
-        runtime.alternativePathSelector().postRailwayTick(level, trains);
+        runtime.routingAuthorityService().onLevelTickEnd(level, trains);
 
         // TODO(Create integration): Evaluate a cleaner route-selection extension point in Create's
         // Navigation.startNavigation / ScheduleRuntime flow to avoid path recalculation from addon side.

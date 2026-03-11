@@ -1,5 +1,6 @@
 package dev.elved.createtrainsloth.config;
 
+import java.util.List;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class TrainSlothConfig {
@@ -57,6 +58,8 @@ public final class TrainSlothConfig {
         public final ModConfigSpec.BooleanValue requireInterlockingBlockForOverride;
         public final ModConfigSpec.BooleanValue useScheduleDestinationAlternatives;
         public final ModConfigSpec.BooleanValue enableNumericStationFamilyFallback;
+        public final ModConfigSpec.BooleanValue enableDepotControl;
+        public final ModConfigSpec.ConfigValue<List<? extends String>> depotHubIds;
         public final ModConfigSpec.IntValue replanWaitTicks;
         public final ModConfigSpec.IntValue switchCooldownTicks;
         public final ModConfigSpec.IntValue maxCandidatePaths;
@@ -81,6 +84,10 @@ public final class TrainSlothConfig {
                 .define("useScheduleDestinationAlternatives", true);
             enableNumericStationFamilyFallback = builder.comment("Treat stations like 'Name', 'Name 2', 'Name 3' as alternatives of one station family.")
                 .define("enableNumericStationFamilyFallback", true);
+            enableDepotControl = builder.comment("Enable router-controlled depot deploy/recall behavior.")
+                .define("enableDepotControl", false);
+            depotHubIds = builder.comment("Hub ids treated as depots for reserve train deploy/recall.")
+                .defineListAllowEmpty(List.of("depotHubIds"), List::of, value -> value instanceof String);
             replanWaitTicks = builder.comment("Ticks waiting for signal before alternative route selection starts.")
                 .defineInRange("replanWaitTicks", 60, 0, 20 * 60 * 5);
             switchCooldownTicks = builder.comment("Minimum ticks between route switches per train.")

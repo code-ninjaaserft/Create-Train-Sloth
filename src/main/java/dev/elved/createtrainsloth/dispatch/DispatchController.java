@@ -14,14 +14,18 @@ import dev.elved.createtrainsloth.line.LineId;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LineRuntimeState;
 import dev.elved.createtrainsloth.line.TrainLine;
+import dev.elved.createtrainsloth.line.TrainServiceClass;
 import dev.elved.createtrainsloth.routing.PlatformAssignmentService;
+import dev.elved.createtrainsloth.routing.TrainRoutingResponse;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import net.minecraft.world.level.Level;
 
 public class DispatchController {
@@ -33,6 +37,7 @@ public class DispatchController {
     private final HeadwayCalculator headwayCalculator;
     private final PlatformAssignmentService platformAssignmentService;
     private final DebugOverlay debugOverlay;
+    private final Map<UUID, Integer> consecutiveHoldByTrain = new HashMap<>();
 
     public DispatchController(
         LineManager lineManager,
@@ -79,7 +84,15 @@ public class DispatchController {
                     }
                 }
 
-                DispatchDecision decision = evaluateDispatch(train, line, runtimeState, headwayTicks, gameTick);
+                TrainServiceClass serviceClass = lineManager.serviceClassForTrain(train.id);
+                DispatchDecision decision = evaluateDispatch(
+                    train,
+                    line,
+                    runtimeState,
+                    headwayTicks,
+                    gameTick,
+                    serviceClass
+                );
                 if (decision.hold()) {
                     hold(train, lineId, decision.reason());
                     continue;
@@ -91,6 +104,7 @@ public class DispatchController {
                         continue;
                     }
                     runtimeState.setPendingDispatch(train.id, gameTick + DISPATCH_TOKEN_DURATION);
+                    consecutiveHoldByTrain.remove(train.id);
                     releasedThisTick = true;
                     debugOverlay.recordRelease(train.id, lineId, gameTick, headwayTicks);
                     logVerbose("Release", train, lineId, "headway=" + headwayTicks);
@@ -127,6 +141,7 @@ public class DispatchController {
                 if (matchesLineStation(line, transition.departedStationName())) {
                     runtimeState.recordDeparture(train.id, transition.departedStationId(), gameTick);
                     runtimeState.clearPendingDispatchIf(train.id);
+                    consecutiveHoldByTrain.remove(train.id);
                     logVerbose("Depart", train, line.id(), transition.departedStationName());
                 }
             }
@@ -180,7 +195,14 @@ public class DispatchController {
         return lineManager.isStationOnLine(line, currentStation);
     }
 
-    private DispatchDecision evaluateDispatch(Train train, TrainLine line, LineRuntimeState runtimeState, int headwayTicks, long gameTick) {
+    private DispatchDecision evaluateDispatch(
+        Train train,
+        TrainLine line,
+        LineRuntimeState runtimeState,
+        int headwayTicks,
+        long gameTick,
+        TrainServiceClass serviceClass
+    ) {
         long arrivedAt = stationStateTracker.arrivalTick(train.id);
         if (arrivedAt == Long.MIN_VALUE) {
             arrivedAt = gameTick;
@@ -203,8 +225,18 @@ public class DispatchController {
             }
 
             int requiredGap = Math.max(line.settings().resolveMinimumIntervalTicks(), headwayTicks - reduction);
-            if (elapsed < requiredGap) {
-                return DispatchDecision.hold("headway " + elapsed + "/" + requiredGap);
+            int priorityAdjustment = priorityGapAdjustment(serviceClass);
+            int fairnessAdjustment = fairnessGapAdjustment(train.id);
+            int minimumFloor = Math.max(20, line.settings().resolveMinimumIntervalTicks() / 2);
+            int weightedRequiredGap = Math.max(minimumFloor, requiredGap - priorityAdjustment - fairnessAdjustment);
+            if (elapsed < weightedRequiredGap) {
+                return DispatchDecision.hold(
+                    "headway "
+                        + elapsed + "/" + weightedRequiredGap
+                        + " service=" + serviceClass.name()
+                        + " priorityAdj=" + priorityAdjustment
+                        + " fairnessAdj=" + fairnessAdjustment
+                );
             }
         }
 
@@ -213,8 +245,20 @@ public class DispatchController {
 
     private void hold(Train train, LineId lineId, String reason) {
         train.runtime.startCooldown();
-        debugOverlay.recordHold(train.id, lineId, reason);
+        int holdStreak = consecutiveHoldByTrain.merge(train.id, 1, Integer::sum);
+        debugOverlay.recordHold(train.id, lineId, reason + " holdStreak=" + holdStreak);
         logVerbose("Hold", train, lineId, reason);
+    }
+
+    private int priorityGapAdjustment(TrainServiceClass serviceClass) {
+        TrainServiceClass resolved = serviceClass == null ? TrainServiceClass.RE : serviceClass;
+        int delta = Math.max(0, resolved.priorityWeight() - TrainServiceClass.RE.priorityWeight());
+        return Math.min(120, delta * 2);
+    }
+
+    private int fairnessGapAdjustment(UUID trainId) {
+        int holdStreak = consecutiveHoldByTrain.getOrDefault(trainId, 0);
+        return Math.min(220, holdStreak * 20);
     }
 
     private void logVerbose(String action, Train train, LineId lineId, String detail) {
@@ -254,7 +298,16 @@ public class DispatchController {
         GlobalStation currentStation = train.getCurrentStation();
         DiscoveredPath selectedPath = null;
 
-        if (platformAssignmentService != null) {
+        if (CreateTrainSlothMod.runtime().routingAuthorityService() != null) {
+            TrainRoutingResponse routerResponse = CreateTrainSlothMod.runtime()
+                .routingAuthorityService()
+                .requestRouteForCurrentSchedule(level, train);
+            if (routerResponse.successful()) {
+                selectedPath = routerResponse.path();
+            }
+        }
+
+        if (selectedPath == null && platformAssignmentService != null) {
             selectedPath = platformAssignmentService.assignmentForTrain(train.id)
                 .map(assignment -> resolveStationById(train, assignment.stationId()))
                 .filter(station -> station != null && (currentStation == null || !station.id.equals(currentStation.id)))
