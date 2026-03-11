@@ -68,18 +68,35 @@ public class TrainLine {
         }
         String stationName = normalizeStation(stationNameRaw);
         for (String configured : stationNames) {
-            if (configured.contains("*")) {
-                String regex = Pattern.quote(configured).replace("\\*", "\\E.*\\Q");
+            String configuredStation = normalizeConfiguredStationFilter(configured);
+            if (configuredStation.isBlank()) {
+                continue;
+            }
+
+            if (configuredStation.contains("*")) {
+                String regex = Pattern.quote(configuredStation).replace("\\*", "\\E.*\\Q");
                 if (stationName.matches(regex)) {
                     return true;
                 }
                 continue;
             }
-            if (configured.equals(stationName)) {
+            if (configuredStation.equals(stationName)) {
                 return true;
             }
         }
         return false;
+    }
+
+    private String normalizeConfiguredStationFilter(String configuredRaw) {
+        String configured = normalizeStation(configuredRaw);
+        if (configured.startsWith("station:")) {
+            return configured.substring("station:".length()).trim();
+        }
+        if (configured.startsWith("hubid:") || configured.startsWith("hub:")) {
+            // Hub resolution requires StationHubRegistry and is handled by runtime line matching.
+            return "";
+        }
+        return configured;
     }
 
     private String normalizeStation(String stationName) {

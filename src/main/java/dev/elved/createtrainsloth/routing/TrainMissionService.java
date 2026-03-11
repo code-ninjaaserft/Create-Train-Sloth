@@ -5,6 +5,8 @@ import com.simibubi.create.content.trains.schedule.ScheduleRuntime;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.debug.DebugOverlay;
 import dev.elved.createtrainsloth.line.TrainLine;
+import dev.elved.createtrainsloth.station.StationHub;
+import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -19,6 +21,11 @@ import java.util.UUID;
 public class TrainMissionService {
 
     private final Map<UUID, MissionState> missionByTrain = new HashMap<>();
+    private final StationHubRegistry stationHubRegistry;
+
+    public TrainMissionService(StationHubRegistry stationHubRegistry) {
+        this.stationHubRegistry = stationHubRegistry;
+    }
 
     public void tick(List<Train> trains, java.util.function.Function<Train, Optional<TrainLine>> lineResolver, DebugOverlay debugOverlay) {
         if (trains == null || trains.isEmpty()) {
@@ -99,19 +106,32 @@ public class TrainMissionService {
         }
 
         int startIndex = Math.floorMod(state.nextIndex, orderedStops.size());
-        int selectedIndex = startIndex;
+        int selectedStopIndex = -1;
         for (int i = 0; i < orderedStops.size(); i++) {
             int candidateIndex = Math.floorMod(startIndex + i, orderedStops.size());
             String candidate = orderedStops.get(candidateIndex);
-            if (!matchesStop(currentLocation, candidate) || orderedStops.size() == 1) {
-                selectedIndex = candidateIndex;
+            if (isNodeRoutePoint(candidate)) {
+                continue;
+            }
+            if (!matchesStop(train, currentLocation, candidate) || orderedStops.size() == 1) {
+                selectedStopIndex = candidateIndex;
                 break;
             }
         }
 
-        String destination = orderedStops.get(selectedIndex);
+        if (selectedStopIndex < 0) {
+            if (debugOverlay != null) {
+                debugOverlay.recordMission(
+                    train.id,
+                    "MISSION_WAIT line=" + line.get().id().value() + " reason=no_routable_stop"
+                );
+            }
+            return;
+        }
+
+        String destination = buildMissionDestination(orderedStops, startIndex, selectedStopIndex);
         state.destinations.addLast(destination);
-        state.nextIndex = Math.floorMod(selectedIndex + 1, orderedStops.size());
+        state.nextIndex = Math.floorMod(selectedStopIndex + 1, orderedStops.size());
 
         if (debugOverlay != null) {
             debugOverlay.recordMission(
@@ -136,12 +156,13 @@ public class TrainMissionService {
         }
 
         String currentName = normalize(currentStation.name);
-        String activeMission = normalize(state.destinations.peekFirst());
-        if (activeMission.isBlank()) {
+        String activeMission = state.destinations.peekFirst();
+        String activeStop = extractMissionStopFilter(activeMission);
+        if (normalize(activeStop).isBlank()) {
             state.destinations.pollFirst();
             return;
         }
-        if (!matchesStop(currentName, activeMission)) {
+        if (!matchesStop(train, currentName, activeStop)) {
             return;
         }
 
@@ -159,17 +180,117 @@ public class TrainMissionService {
         return normalize(currentStation.name);
     }
 
-    private boolean matchesStop(String currentLocation, String configuredStop) {
+    private boolean matchesStop(Train train, String currentLocation, String configuredStop) {
+        String stopFilter = extractMissionStopFilter(configuredStop);
         String current = normalize(currentLocation);
-        String configured = normalize(configuredStop);
+        String configured = normalizeStationFilter(stopFilter);
         if (current.isBlank() || configured.isBlank()) {
             return false;
         }
+
+        Optional<StationHub> hub = resolveHubForFilter(stopFilter);
+        if (hub.isPresent()) {
+            return hub.get().matchesStationName(current);
+        }
+
+        if (isNodeRoutePoint(stopFilter)) {
+            return false;
+        }
+
         if (configured.contains("*")) {
             String regex = java.util.regex.Pattern.quote(configured).replace("\\*", "\\E.*\\Q");
             return current.matches(regex);
         }
         return configured.equals(current);
+    }
+
+    private String buildMissionDestination(List<String> routePoints, int startIndex, int stopIndex) {
+        if (routePoints == null || routePoints.isEmpty()) {
+            return "";
+        }
+
+        String stopFilter = normalize(routePoints.get(stopIndex));
+        List<String> viaNodes = new ArrayList<>();
+
+        int guard = 0;
+        int index = startIndex;
+        while (index != stopIndex && guard < routePoints.size()) {
+            String point = routePoints.get(index);
+            if (isNodeRoutePoint(point)) {
+                String node = normalizeNodeRoutePoint(point);
+                if (!node.isBlank()) {
+                    viaNodes.add(node);
+                }
+            }
+            index = Math.floorMod(index + 1, routePoints.size());
+            guard++;
+        }
+
+        if (viaNodes.isEmpty()) {
+            return stopFilter;
+        }
+
+        return "via[" + String.join(",", viaNodes) + "]->" + stopFilter;
+    }
+
+    private String extractMissionStopFilter(String destination) {
+        if (destination == null) {
+            return "";
+        }
+
+        String trimmed = destination.trim();
+        String lowered = trimmed.toLowerCase(Locale.ROOT);
+        if (!lowered.startsWith("via[")) {
+            return trimmed;
+        }
+
+        int closing = trimmed.indexOf(']');
+        if (closing < 0) {
+            return trimmed;
+        }
+
+        String remainder = trimmed.substring(closing + 1).trim();
+        if (remainder.startsWith("->")) {
+            remainder = remainder.substring(2).trim();
+        }
+        return remainder.isBlank() ? trimmed : remainder;
+    }
+
+    private boolean isNodeRoutePoint(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        String normalized = normalize(raw);
+        if (normalized.startsWith("node:") || normalized.startsWith("nodeid:")) {
+            return true;
+        }
+        return normalized.matches("^n\\d+$");
+    }
+
+    private String normalizeNodeRoutePoint(String raw) {
+        String normalized = normalize(raw);
+        if (normalized.startsWith("nodeid:")) {
+            return normalized.substring("nodeid:".length()).trim();
+        }
+        if (normalized.startsWith("node:")) {
+            return normalized.substring("node:".length()).trim();
+        }
+        return normalized;
+    }
+
+    private Optional<StationHub> resolveHubForFilter(String filter) {
+        if (stationHubRegistry == null || filter == null || filter.isBlank()) {
+            return Optional.empty();
+        }
+        return stationHubRegistry.findHubForScheduleFilter(filter);
+    }
+
+    private String normalizeStationFilter(String filter) {
+        String configured = normalize(filter);
+        if (configured.startsWith("station:")) {
+            return configured.substring("station:".length()).trim();
+        }
+        return configured;
     }
 
     private String normalize(String value) {

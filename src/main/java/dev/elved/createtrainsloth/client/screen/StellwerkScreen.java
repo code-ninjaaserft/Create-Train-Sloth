@@ -42,8 +42,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
     private static final int MAP_H = 96;
     private static final int CONTROL_X = 164;
     private static final int CONTROL_Y = 30;
-    private static final int ASSIGNMENT_X = 116;
-    private static final int ASSIGNMENT_Y = 126;
 
     private final Map<Integer, ProjectedNode> projectedNodes = new HashMap<>();
     private int selectedSection = -1;
@@ -53,13 +51,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
     private Button lockButton;
     private Button unlockButton;
     private Button autoRoutingButton;
-    private Button generateLinesButton;
-    private Button trainPrevButton;
-    private Button trainNextButton;
-    private Button linePrevButton;
-    private Button lineNextButton;
-    private Button assignTrainButton;
-    private Button unassignTrainButton;
+    private Button missionPingButton;
 
     public StellwerkScreen(StellwerkMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -101,13 +93,13 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
             button -> sendMenuButton(StellwerkMenu.BUTTON_TOGGLE_AUTOROUTING)
         ));
 
-        generateLinesButton = addRenderableWidget(new StellwerkStyledButton(
+        missionPingButton = addRenderableWidget(new StellwerkStyledButton(
             controlsX,
             controlsY + 48,
             58,
             14,
-            Component.translatable("create_train_sloth.stellwerk.button.generate_lines"),
-            button -> sendMenuButton(StellwerkMenu.BUTTON_GENERATE_LINES)
+            Component.translatable("create_train_sloth.stellwerk.button.mission_ping"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_TRIGGER_MISSION_PING)
         ));
 
         addRenderableWidget(new StellwerkStyledButton(
@@ -138,58 +130,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
                 panY = 0D;
             }
         ));
-        int assignmentX = leftPos + ASSIGNMENT_X;
-        int assignmentY = topPos + ASSIGNMENT_Y;
-
-        trainPrevButton = addRenderableWidget(new StellwerkStyledButton(
-            assignmentX,
-            assignmentY + 10,
-            16,
-            16,
-            Component.literal("<"),
-            button -> sendMenuButton(StellwerkMenu.BUTTON_TRAIN_PREV)
-        ));
-        trainNextButton = addRenderableWidget(new StellwerkStyledButton(
-            assignmentX + 78,
-            assignmentY + 10,
-            16,
-            16,
-            Component.literal(">"),
-            button -> sendMenuButton(StellwerkMenu.BUTTON_TRAIN_NEXT)
-        ));
-        linePrevButton = addRenderableWidget(new StellwerkStyledButton(
-            assignmentX,
-            assignmentY + 26,
-            16,
-            16,
-            Component.literal("<"),
-            button -> sendMenuButton(StellwerkMenu.BUTTON_LINE_PREV)
-        ));
-        lineNextButton = addRenderableWidget(new StellwerkStyledButton(
-            assignmentX + 78,
-            assignmentY + 26,
-            16,
-            16,
-            Component.literal(">"),
-            button -> sendMenuButton(StellwerkMenu.BUTTON_LINE_NEXT)
-        ));
-        assignTrainButton = addRenderableWidget(new StellwerkStyledButton(
-            assignmentX + 16,
-            assignmentY + 42,
-            38,
-            16,
-            Component.translatable("create_train_sloth.stellwerk.button.assign_line"),
-            button -> sendMenuButton(StellwerkMenu.BUTTON_ASSIGN_SELECTED)
-        ));
-        unassignTrainButton = addRenderableWidget(new StellwerkStyledButton(
-            assignmentX + 56,
-            assignmentY + 42,
-            38,
-            16,
-            Component.translatable("create_train_sloth.stellwerk.button.unassign_line"),
-            button -> sendMenuButton(StellwerkMenu.BUTTON_UNASSIGN_SELECTED)
-        ));
-
         updateButtonState();
     }
 
@@ -241,23 +181,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
             );
         }
 
-        graphics.drawString(font, Component.translatable("create_train_sloth.stellwerk.assigned_label", trimToWidth(menu.selectedAssignmentLabel(), 12)), 116, 128, 0x5D5A52, false);
-        graphics.drawString(
-            font,
-            "T: " + trimToWidth(menu.selectedTrainLabel(), 48),
-            132,
-            141,
-            0xEFE2C8,
-            false
-        );
-        graphics.drawString(
-            font,
-            "L: " + trimToWidth(menu.selectedLineLabel(), 48),
-            132,
-            157,
-            0xEFE2C8,
-            false
-        );
     }
 
     @Override
@@ -415,15 +338,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         lockButton.active = hasSelection;
         unlockButton.active = hasSelection && selected.locked();
 
-        boolean hasLines = menu.lineCount() > 0;
-        boolean hasTrains = menu.trackedTrainCount() > 0;
-        generateLinesButton.active = true;
-        trainPrevButton.active = hasTrains;
-        trainNextButton.active = hasTrains;
-        linePrevButton.active = hasLines;
-        lineNextButton.active = hasLines;
-        assignTrainButton.active = hasLines && hasTrains;
-        unassignTrainButton.active = hasTrains && !"-".equals(menu.selectedAssignmentLabel());
+        missionPingButton.active = menu.trackedTrainCount() > 0;
     }
 
     private Component autoRoutingText() {

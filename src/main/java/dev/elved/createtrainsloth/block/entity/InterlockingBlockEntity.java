@@ -1,5 +1,7 @@
 package dev.elved.createtrainsloth.block.entity;
 
+import com.simibubi.create.Create;
+import com.simibubi.create.content.trains.entity.Train;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.interlocking.schematic.StellwerkSchematicBuilder;
 import dev.elved.createtrainsloth.interlocking.schematic.StellwerkNodeView;
@@ -500,6 +502,26 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
         }
 
         refreshControlData(level);
+        setChangedAndSync();
+        return true;
+    }
+
+    public boolean triggerManualMissionPing() {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+        if (CreateTrainSlothMod.runtime().routingAuthorityService() == null) {
+            return false;
+        }
+
+        List<Train> trains = List.copyOf(Create.RAILWAYS.trains.values());
+        int started = CreateTrainSlothMod.runtime()
+            .routingAuthorityService()
+            .triggerManualMissionPing(level, trains);
+        if (started <= 0) {
+            return false;
+        }
+
         setChangedAndSync();
         return true;
     }

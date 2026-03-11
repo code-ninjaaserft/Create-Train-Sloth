@@ -109,6 +109,20 @@ public class HubDestinationInstruction extends DestinationInstruction {
                 return response.path();
             }
 
+            DiscoveredPath legacyFallbackPath = resolveLegacyHubPath(train);
+            if (legacyFallbackPath != null) {
+                if (debugOverlay != null) {
+                    debugOverlay.recordRouterStage(
+                        train.id,
+                        lineId,
+                        response.correlationId(),
+                        STAGE_RESPONSE_APPLIED,
+                        "status=FALLBACK_LEGACY reason=" + (response.reason() == null ? "-" : response.reason())
+                    );
+                }
+                return legacyFallbackPath;
+            }
+
             if (TrainRoutingResponse.STATUS_NO_DESTINATION_MATCH.equals(response.status())) {
                 train.status.failedNavigationNoTarget(getFilter());
             } else {
@@ -149,5 +163,35 @@ public class HubDestinationInstruction extends DestinationInstruction {
         }
 
         return best;
+    }
+
+    @Nullable
+    private DiscoveredPath resolveLegacyHubPath(Train train) {
+        if (train == null || train.graph == null) {
+            return null;
+        }
+
+        StationHubRegistry stationHubRegistry = CreateTrainSlothMod.runtime().stationHubRegistry();
+        if (stationHubRegistry == null) {
+            return null;
+        }
+
+        Optional<StationHub> hub = stationHubRegistry.findHubForScheduleFilter(getFilter());
+        if (hub.isEmpty()) {
+            return null;
+        }
+
+        List<GlobalStation> validStations = new ArrayList<>();
+        for (GlobalStation globalStation : train.graph.getPoints(EdgePointType.STATION)) {
+            if (hub.get().matchesStation(globalStation)) {
+                validStations.add(globalStation);
+            }
+        }
+
+        if (validStations.isEmpty()) {
+            return null;
+        }
+
+        return train.navigation.findPathTo(new ArrayList<>(validStations), Double.MAX_VALUE);
     }
 }

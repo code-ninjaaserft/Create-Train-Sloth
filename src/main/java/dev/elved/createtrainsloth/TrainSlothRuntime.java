@@ -57,7 +57,7 @@ public class TrainSlothRuntime {
         savedData = TrainSlothSavedData.load(minecraftServer);
         lineRegistry = new LineRegistry(savedData);
         stationHubRegistry = new StationHubRegistry(savedData);
-        lineManager = new LineManager(lineRegistry);
+        lineManager = new LineManager(lineRegistry, stationHubRegistry);
         linePlanningService = new LinePlanningService();
         scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry, stationHubRegistry);
         stationStateTracker = new StationStateTracker();
@@ -99,7 +99,7 @@ public class TrainSlothRuntime {
             stationHubRegistry,
             debugOverlay
         );
-        trainMissionService = new TrainMissionService();
+        trainMissionService = new TrainMissionService(stationHubRegistry);
         routingAuthorityService = new RoutingAuthorityService(
             lineManager,
             scheduleLineSyncService,

@@ -2,6 +2,8 @@ package dev.elved.createtrainsloth.line;
 
 import com.simibubi.create.content.trains.entity.Train;
 import com.simibubi.create.content.trains.station.GlobalStation;
+import dev.elved.createtrainsloth.station.StationHub;
+import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -15,10 +17,12 @@ import java.util.UUID;
 public class LineManager {
 
     private final LineRegistry lineRegistry;
+    private final StationHubRegistry stationHubRegistry;
     private final Map<LineId, LineRuntimeState> runtimeByLine = new HashMap<>();
 
-    public LineManager(LineRegistry lineRegistry) {
+    public LineManager(LineRegistry lineRegistry, StationHubRegistry stationHubRegistry) {
         this.lineRegistry = lineRegistry;
+        this.stationHubRegistry = stationHubRegistry;
     }
 
     public Collection<TrainLine> allLines() {
@@ -73,6 +77,19 @@ public class LineManager {
     }
 
     public boolean isStationOnLine(TrainLine line, GlobalStation station) {
-        return line.matchesStation(station);
+        if (line.matchesStation(station)) {
+            return true;
+        }
+        if (stationHubRegistry == null || line == null || station == null) {
+            return false;
+        }
+
+        for (String routePoint : line.stationNames()) {
+            Optional<StationHub> hub = stationHubRegistry.findHubForScheduleFilter(routePoint);
+            if (hub.isPresent() && hub.get().matchesStation(station)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

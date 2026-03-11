@@ -11,6 +11,7 @@ import dev.elved.createtrainsloth.line.TrainLine;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -91,7 +92,8 @@ public class ScheduleDestinationResolver {
                 List.copyOf(candidateById.values()),
                 Map.copyOf(alternativeEntryByStation),
                 sourceFilter,
-                mainResolution.get().destinationHubId()
+                mainResolution.get().destinationHubId(),
+                List.of()
             )
         );
     }
@@ -101,8 +103,9 @@ public class ScheduleDestinationResolver {
             return Optional.empty();
         }
 
+        ParsedRouteFilter parsedFilter = parseRouteFilter(filter);
         List<GlobalStation> allStations = sortedStations(train);
-        List<GlobalStation> matchedStations = resolveStationsForFilter(allStations, filter);
+        List<GlobalStation> matchedStations = resolveStationsForFilter(allStations, parsedFilter.destinationFilter());
         if (matchedStations.isEmpty()) {
             return Optional.empty();
         }
@@ -112,7 +115,7 @@ public class ScheduleDestinationResolver {
             ? bestPath.destination
             : matchedStations.get(0);
 
-        String destinationHubId = resolveHubForFilter(filter)
+        String destinationHubId = resolveHubForFilter(parsedFilter.destinationFilter())
             .map(hub -> hub.id().value())
             .orElse(null);
 
@@ -122,7 +125,8 @@ public class ScheduleDestinationResolver {
                 List.copyOf(matchedStations),
                 Map.of(),
                 filter,
-                destinationHubId
+                destinationHubId,
+                List.copyOf(parsedFilter.requiredNodes())
             )
         );
     }
@@ -180,7 +184,7 @@ public class ScheduleDestinationResolver {
         TrainLine line = optionalLine.get();
         List<GlobalStation> lineStations = new ArrayList<>();
         for (GlobalStation station : allStations) {
-            if (line.matchesStation(station)) {
+            if (lineManager.isStationOnLine(line, station)) {
                 lineStations.add(station);
             }
         }
@@ -222,7 +226,8 @@ public class ScheduleDestinationResolver {
             }
         }
 
-        List<GlobalStation> matched = matchByRegex(allStations, instruction.getFilterForRegex());
+        String stationFilter = unwrapStationFilter(filter);
+        List<GlobalStation> matched = matchByRegex(allStations, toRegex(stationFilter));
         return new ResolvedFilter(matched, filter, null);
     }
 
@@ -234,7 +239,8 @@ public class ScheduleDestinationResolver {
                 return hubStations;
             }
         }
-        return matchByRegex(allStations, toRegex(filter));
+        String stationFilter = unwrapStationFilter(filter);
+        return matchByRegex(allStations, toRegex(stationFilter));
     }
 
     private List<GlobalStation> resolveStationsForHub(List<GlobalStation> allStations, StationHub hub) {
@@ -249,8 +255,14 @@ public class ScheduleDestinationResolver {
 
     private List<GlobalStation> matchByRegex(List<GlobalStation> stations, String regex) {
         List<GlobalStation> matched = new ArrayList<>();
+        Pattern compiled;
+        try {
+            compiled = Pattern.compile(regex, Pattern.CASE_INSENSITIVE);
+        } catch (Exception ignored) {
+            return List.of();
+        }
         for (GlobalStation station : stations) {
-            if (station.name != null && station.name.matches(regex)) {
+            if (station.name != null && compiled.matcher(station.name).matches()) {
                 matched.add(station);
             }
         }
@@ -371,12 +383,25 @@ public class ScheduleDestinationResolver {
         return stationNameRaw.trim().toLowerCase(Locale.ROOT);
     }
 
+    private String unwrapStationFilter(String filter) {
+        if (filter == null) {
+            return "";
+        }
+        String normalized = filter.trim();
+        String lowered = normalized.toLowerCase(Locale.ROOT);
+        if (lowered.startsWith("station:")) {
+            return normalized.substring("station:".length()).trim();
+        }
+        return normalized;
+    }
+
     public record DestinationContext(
         GlobalStation primaryDestination,
         List<GlobalStation> candidateStations,
         Map<UUID, Integer> alternativeEntryByStation,
         String sourceFilter,
-        String destinationHubId
+        String destinationHubId,
+        List<String> requiredNodes
     ) {
     }
 
@@ -389,5 +414,53 @@ public class ScheduleDestinationResolver {
         String sourceFilter,
         String destinationHubId
     ) {
+    }
+
+    private ParsedRouteFilter parseRouteFilter(String rawFilter) {
+        if (rawFilter == null || rawFilter.isBlank()) {
+            return new ParsedRouteFilter("", List.of());
+        }
+
+        String trimmed = rawFilter.trim();
+        String lowered = trimmed.toLowerCase(Locale.ROOT);
+        if (!lowered.startsWith("via[")) {
+            return new ParsedRouteFilter(trimmed, List.of());
+        }
+
+        int closing = trimmed.indexOf(']');
+        if (closing < 0) {
+            return new ParsedRouteFilter(trimmed, List.of());
+        }
+
+        String viaPayload = trimmed.substring(4, closing).trim();
+        String remainder = trimmed.substring(closing + 1).trim();
+        if (remainder.startsWith("->")) {
+            remainder = remainder.substring(2).trim();
+        }
+        if (remainder.isBlank()) {
+            return new ParsedRouteFilter(trimmed, List.of());
+        }
+
+        List<String> requiredNodes = Arrays.stream(viaPayload.split(","))
+            .map(String::trim)
+            .filter(value -> !value.isBlank())
+            .map(this::normalizeRequiredNodeToken)
+            .toList();
+
+        return new ParsedRouteFilter(remainder, requiredNodes);
+    }
+
+    private String normalizeRequiredNodeToken(String raw) {
+        String normalized = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("nodeid:")) {
+            return normalized.substring("nodeid:".length()).trim();
+        }
+        if (normalized.startsWith("node:")) {
+            return normalized.substring("node:".length()).trim();
+        }
+        return normalized;
+    }
+
+    private record ParsedRouteFilter(String destinationFilter, List<String> requiredNodes) {
     }
 }

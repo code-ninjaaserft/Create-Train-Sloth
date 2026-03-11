@@ -1,6 +1,3 @@
 {
-  "parent": "minecraft:item/generated",
-  "textures": {
-    "layer0": "create_train_sloth:item/station_link"
-  }
+  "parent": "create_train_sloth:block/hub_linker"
 }

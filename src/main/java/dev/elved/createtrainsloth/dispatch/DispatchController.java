@@ -318,7 +318,7 @@ public class DispatchController {
         if (selectedPath == null) {
             List<GlobalStation> targets = new ArrayList<>();
             for (GlobalStation station : train.graph.getPoints(EdgePointType.STATION)) {
-                if (!line.matchesStation(station)) {
+                if (!lineManager.isStationOnLine(line, station)) {
                     continue;
                 }
                 if (currentStation != null && station.id.equals(currentStation.id)) {
@@ -327,7 +327,7 @@ public class DispatchController {
                 targets.add(station);
             }
 
-            if (targets.isEmpty() && currentStation != null && line.matchesStation(currentStation)) {
+            if (targets.isEmpty() && currentStation != null && lineManager.isStationOnLine(line, currentStation)) {
                 targets.add(currentStation);
             }
             if (targets.isEmpty()) {

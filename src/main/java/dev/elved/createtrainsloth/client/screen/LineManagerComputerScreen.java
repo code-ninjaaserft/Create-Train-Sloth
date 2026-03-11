@@ -4,6 +4,7 @@ import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.menu.LineManagerComputerMenu;
 import dev.elved.createtrainsloth.network.EditStellwerkRoutePayload;
 import java.util.List;
+import java.util.Locale;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -32,7 +33,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
     private static final int LIST_X = 12;
     private static final int LIST_Y = 94;
     private static final int LIST_W = 212;
-    private static final int LIST_H = 72;
+    private static final int LIST_H = 56;
     private static final int ROW_H = 12;
     private static final int VISIBLE_ROWS = LIST_H / ROW_H;
     private static final String[] SERVICE_CLASSES = { "S", "IR", "RE", "IC", "ICN", "ICE" };
@@ -45,10 +46,12 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
     private Button createRouteButton;
     private Button applyMetaButton;
     private Button deleteRouteButton;
+    private Button addHubButton;
     private Button addStationButton;
     private Button removeStationButton;
     private EditBox createRouteNameInput;
     private EditBox routeNameInput;
+    private EditBox hubInput;
     private EditBox stationInput;
     private int serviceClassIndex = 2;
     private int selectedStationIndex = -1;
@@ -80,7 +83,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
 
         linePrevButton = addRenderableWidget(new RouteStyledButton(
             contentLeft,
-            topPos + 24,
+            topPos + 32,
             18,
             14,
             Component.literal("<"),
@@ -88,7 +91,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         ));
         lineNextButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 194,
-            topPos + 24,
+            topPos + 32,
             18,
             14,
             Component.literal(">"),
@@ -97,7 +100,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
 
         servicePrevButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 140,
-            topPos + 42,
+            topPos + 48,
             16,
             14,
             Component.literal("<"),
@@ -105,31 +108,31 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         ));
         serviceNextButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 196,
-            topPos + 42,
+            topPos + 48,
             16,
             14,
             Component.literal(">"),
             button -> cycleServiceClass(1)
         ));
 
-        createRouteNameInput = new EditBox(font, contentLeft, topPos + 58, 128, 14, Component.empty());
+        createRouteNameInput = new EditBox(font, contentLeft, topPos + 64, 128, 14, Component.empty());
         createRouteNameInput.setMaxLength(60);
         addRenderableWidget(createRouteNameInput);
         createRouteButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 130,
-            topPos + 58,
+            topPos + 64,
             82,
             14,
             Component.translatable("create_train_sloth.stellwerk.route_creator.button.create_route"),
             button -> createRoute()
         ));
 
-        routeNameInput = new EditBox(font, contentLeft, topPos + 74, 128, 14, Component.empty());
+        routeNameInput = new EditBox(font, contentLeft, topPos + 80, 128, 14, Component.empty());
         routeNameInput.setMaxLength(60);
         addRenderableWidget(routeNameInput);
         applyMetaButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 130,
-            topPos + 74,
+            topPos + 80,
             40,
             14,
             Component.translatable("create_train_sloth.stellwerk.route_creator.button.apply"),
@@ -137,11 +140,23 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         ));
         deleteRouteButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 172,
-            topPos + 74,
+            topPos + 80,
             40,
             14,
             Component.translatable("create_train_sloth.stellwerk.route_creator.button.delete_route"),
             button -> deleteRoute()
+        ));
+
+        hubInput = new EditBox(font, contentLeft, topPos + 152, 128, 14, Component.empty());
+        hubInput.setMaxLength(80);
+        addRenderableWidget(hubInput);
+        addHubButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 130,
+            topPos + 152,
+            82,
+            14,
+            Component.literal("Hub +"),
+            button -> addHub()
         ));
 
         stationInput = new EditBox(font, contentLeft, topPos + 168, 128, 14, Component.empty());
@@ -152,7 +167,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             topPos + 168,
             40,
             14,
-            Component.translatable("create_train_sloth.stellwerk.route_creator.button.add"),
+            Component.literal("Stn +"),
             button -> addStation()
         ));
         removeStationButton = addRenderableWidget(new RouteStyledButton(
@@ -220,27 +235,27 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             font,
             Component.translatable("create_train_sloth.stellwerk.route_creator.line"),
             12,
-            26,
+            34,
             0xE7DEC9,
             false
         );
-        graphics.drawString(font, trimToWidth(menu.selectedLineLabel(), 160), 34, 27, 0xF6ECD4, false);
+        graphics.drawString(font, trimToWidth(menu.selectedLineLabel(), 160), 34, 35, 0xF6ECD4, false);
 
         graphics.drawString(
             font,
             Component.translatable("create_train_sloth.stellwerk.route_creator.service_class"),
             12,
-            44,
+            50,
             0xE7DEC9,
             false
         );
-        graphics.drawCenteredString(font, currentServiceClass(), 184, 45, 0xF6ECD4);
+        graphics.drawCenteredString(font, currentServiceClass(), 184, 51, 0xF6ECD4);
 
         graphics.drawString(
             font,
             Component.translatable("create_train_sloth.stellwerk.route_creator.new_route"),
             12,
-            60,
+            56,
             0xD7CEB8,
             false
         );
@@ -248,7 +263,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             font,
             Component.translatable("create_train_sloth.stellwerk.route_creator.route_name"),
             12,
-            76,
+            72,
             0xD7CEB8,
             false
         );
@@ -260,6 +275,8 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             0xD7CEB8,
             false
         );
+        graphics.drawString(font, Component.literal("Hub"), 12, 144, 0x8FD8FF, false);
+        graphics.drawString(font, Component.literal("Station"), 12, 160, 0xA8E6A1, false);
 
         List<String> stations = routeStations();
         for (int row = 0; row < VISIBLE_ROWS; row++) {
@@ -269,7 +286,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             }
 
             int rowY = LIST_Y + row * ROW_H + 2;
-            int textColor = 0xEFE2C8;
+            int textColor = colorForRoutePoint(stations.get(stationIndex));
             if (stationIndex == selectedStationIndex) {
                 graphics.fill(LIST_X + 1, LIST_Y + row * ROW_H + 1, LIST_X + LIST_W - 1, LIST_Y + row * ROW_H + ROW_H, 0xAA4B93DF);
                 textColor = 0xFFFFFF;
@@ -277,7 +294,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
                 graphics.fill(LIST_X + 1, LIST_Y + row * ROW_H + 1, LIST_X + LIST_W - 1, LIST_Y + row * ROW_H + ROW_H, 0x886F6F6F);
             }
 
-            String label = (stationIndex + 1) + ". " + trimToWidth(stations.get(stationIndex), LIST_W - 12);
+            String label = (stationIndex + 1) + ". " + trimToWidth(formatRoutePoint(stations.get(stationIndex)), LIST_W - 12);
             graphics.drawString(font, label, LIST_X + 4, rowY, textColor, false);
         }
     }
@@ -350,6 +367,10 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             createRoute();
             return true;
         }
+        if ((keyCode == 257 || keyCode == 335) && hubInput.isFocused()) {
+            addHub();
+            return true;
+        }
         if ((keyCode == 257 || keyCode == 335) && stationInput.isFocused()) {
             addStation();
             return true;
@@ -358,6 +379,9 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             return true;
         }
         if (routeNameInput.keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        if (hubInput.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
         if (stationInput.keyPressed(keyCode, scanCode, modifiers)) {
@@ -372,6 +396,9 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             return true;
         }
         if (routeNameInput.charTyped(codePoint, modifiers)) {
+            return true;
+        }
+        if (hubInput.charTyped(codePoint, modifiers)) {
             return true;
         }
         if (stationInput.charTyped(codePoint, modifiers)) {
@@ -411,12 +438,22 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
 
     private void addStation() {
         String lineId = menu.selectedLineLabel();
-        String stationName = stationInput.getValue().trim();
+        String stationName = normalizeStationToken(stationInput.getValue());
         if ("-".equals(lineId) || stationName.isBlank()) {
             return;
         }
         PacketDistributor.sendToServer(EditStellwerkRoutePayload.addStation(menu.blockPos(), lineId, stationName));
         stationInput.setValue("");
+    }
+
+    private void addHub() {
+        String lineId = menu.selectedLineLabel();
+        String hubToken = normalizeHubToken(hubInput.getValue());
+        if ("-".equals(lineId) || hubToken.isBlank()) {
+            return;
+        }
+        PacketDistributor.sendToServer(EditStellwerkRoutePayload.addStation(menu.blockPos(), lineId, hubToken));
+        hubInput.setValue("");
     }
 
     private void removeSelectedStation() {
@@ -525,8 +562,69 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         createRouteButton.active = !createRouteNameInput.getValue().trim().isBlank();
         applyMetaButton.active = hasLine && !routeNameInput.getValue().trim().isBlank();
         deleteRouteButton.active = hasLine;
+        addHubButton.active = hasLine && !hubInput.getValue().trim().isBlank();
         addStationButton.active = hasLine && !stationInput.getValue().trim().isBlank();
         removeStationButton.active = hasLine && hasSelection;
+    }
+
+    private int colorForRoutePoint(String routePointRaw) {
+        String routePoint = routePointRaw == null ? "" : routePointRaw.trim().toLowerCase(Locale.ROOT);
+        if (routePoint.startsWith("hubid:") || routePoint.startsWith("hub:")) {
+            return 0x8FD8FF;
+        }
+        if (routePoint.startsWith("station:")) {
+            return 0xA8E6A1;
+        }
+        return 0xEFE2C8;
+    }
+
+    private String formatRoutePoint(String routePointRaw) {
+        String routePoint = routePointRaw == null ? "" : routePointRaw.trim();
+        if (routePoint.isBlank()) {
+            return "-";
+        }
+
+        String normalized = routePoint.toLowerCase(Locale.ROOT);
+        if (normalized.startsWith("hubid:")) {
+            return "[HUB] " + routePoint.substring("hubid:".length()).trim();
+        }
+        if (normalized.startsWith("hub:")) {
+            return "[HUB] " + routePoint.substring("hub:".length()).trim();
+        }
+        if (normalized.startsWith("station:")) {
+            return "[STN] " + routePoint.substring("station:".length()).trim();
+        }
+        return "[STN] " + routePoint;
+    }
+
+    private String normalizeHubToken(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if (value.startsWith("hubid:")) {
+            value = value.substring("hubid:".length()).trim();
+        } else if (value.startsWith("hub:")) {
+            value = value.substring("hub:".length()).trim();
+        } else if (value.startsWith("station:")) {
+            value = value.substring("station:".length()).trim();
+        }
+        return value.isBlank() ? "" : "hubid:" + value;
+    }
+
+    private String normalizeStationToken(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if (value.startsWith("station:")) {
+            value = value.substring("station:".length()).trim();
+        } else if (value.startsWith("hubid:")) {
+            value = value.substring("hubid:".length()).trim();
+        } else if (value.startsWith("hub:")) {
+            value = value.substring("hub:".length()).trim();
+        }
+        return value.isBlank() ? "" : "station:" + value;
     }
 
     private String trimToWidth(String value, int maxWidth) {

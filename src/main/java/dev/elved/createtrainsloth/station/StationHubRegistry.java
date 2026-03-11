@@ -78,13 +78,14 @@ public class StationHubRegistry {
 
     public Optional<StationHub> findHubForScheduleFilter(String filter) {
         String normalized = normalize(filter);
-        if (normalized.isBlank()) {
+        String resolvedHubId = normalizeHubFilter(normalized);
+        if (resolvedHubId.isBlank()) {
             return Optional.empty();
         }
 
         Optional<StationHub> byId;
         try {
-            byId = Optional.ofNullable(savedData.stationHubs().get(new StationHubId(normalized)));
+            byId = Optional.ofNullable(savedData.stationHubs().get(new StationHubId(resolvedHubId)));
         } catch (IllegalArgumentException ignored) {
             byId = Optional.empty();
         }
@@ -94,7 +95,8 @@ public class StationHubRegistry {
 
         for (Map.Entry<StationHubId, StationHub> entry : savedData.stationHubs().entrySet()) {
             StationHub hub = entry.getValue();
-            if (normalize(hub.displayName()).equals(normalized)) {
+            String normalizedDisplay = normalize(hub.displayName());
+            if (normalizedDisplay.equals(resolvedHubId) || normalizedDisplay.equals(normalized)) {
                 return Optional.of(hub);
             }
         }
@@ -182,5 +184,34 @@ public class StationHubRegistry {
             return "";
         }
         return value.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private String normalizeHubFilter(String normalizedFilter) {
+        if (normalizedFilter == null) {
+            return "";
+        }
+
+        String value = normalizedFilter.trim();
+        if (value.length() >= 2) {
+            if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.substring(1, value.length() - 1).trim();
+            }
+        }
+
+        if (value.startsWith("hubid")) {
+            String remainder = value.substring("hubid".length()).trim();
+            if (!remainder.isEmpty() && (remainder.charAt(0) == ':' || remainder.charAt(0) == '.')) {
+                return remainder.substring(1).trim();
+            }
+        }
+
+        if (value.startsWith("hub")) {
+            String remainder = value.substring("hub".length()).trim();
+            if (!remainder.isEmpty() && (remainder.charAt(0) == ':' || remainder.charAt(0) == '.')) {
+                return remainder.substring(1).trim();
+            }
+        }
+
+        return value;
     }
 }

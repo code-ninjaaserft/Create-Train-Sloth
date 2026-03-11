@@ -78,6 +78,11 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
     @Nullable
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
+        if (level != null && !level.isClientSide()) {
+            if (refreshControlData(level, true)) {
+                setChangedAndSync();
+            }
+        }
         return new LineManagerComputerMenu(containerId, playerInventory, this);
     }
 

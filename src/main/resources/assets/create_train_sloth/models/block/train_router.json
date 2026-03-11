@@ -1,0 +1,52 @@
+{
+  "textures": {
+    "side": "faultirtrains:block/train_casing_side",
+    "top": "faultirtrains:block/train_casing_top",
+    "bottom": "faultirtrains:block/train_casing_bottom",
+    "frame": "faultirtrains:block/brass_frame",
+    "router": "faultirtrains:block/router_face",
+    "port": "faultirtrains:block/port_dark"
+  },
+  "elements": [
+    {
+      "from": [0, 0, 0],
+      "to": [16, 16, 16],
+      "faces": {
+        "down": { "texture": "#bottom" },
+        "up": { "texture": "#top" },
+        "north": { "texture": "#side" },
+        "south": { "texture": "#side" },
+        "west": { "texture": "#side" },
+        "east": { "texture": "#side" }
+      }
+    },
+    {
+      "from": [1, 1, 0],
+      "to": [15, 15, 1],
+      "faces": {
+        "north": { "texture": "#frame" }
+      }
+    },
+    {
+      "from": [3, 5, 1],
+      "to": [13, 13, 2],
+      "faces": {
+        "north": { "texture": "#router" }
+      }
+    },
+    {
+      "from": [3, 2, 1],
+      "to": [6, 3, 2],
+      "faces": {
+        "north": { "texture": "#port" }
+      }
+    },
+    {
+      "from": [10, 2, 1],
+      "to": [13, 3, 2],
+      "faces": {
+        "north": { "texture": "#port" }
+      }
+    }
+  ]
+}

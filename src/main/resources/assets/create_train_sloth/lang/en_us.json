@@ -61,6 +61,7 @@
   "create_train_sloth.stellwerk.button.auto_on": "Auto: On",
   "create_train_sloth.stellwerk.button.auto_off": "Auto: Off",
   "create_train_sloth.stellwerk.button.generate_lines": "Generate",
+  "create_train_sloth.stellwerk.button.mission_ping": "Mission Ping",
   "create_train_sloth.stellwerk.button.assign_line": "Set",
   "create_train_sloth.stellwerk.button.unassign_line": "Clear",
   "create_train_sloth.stellwerk.button.center": "C",

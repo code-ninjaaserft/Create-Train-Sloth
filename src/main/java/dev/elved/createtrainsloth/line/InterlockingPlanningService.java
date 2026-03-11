@@ -180,7 +180,7 @@ public class InterlockingPlanningService {
         }
 
         List<String> orderedStations = routeStationsByLine.computeIfAbsent(lineIdValue, ignored -> new ArrayList<>());
-        String normalizedStation = normalizeStationName(stationName);
+        String normalizedStation = normalizeRoutePoint(stationName);
         boolean changed;
         if (add) {
             changed = !orderedStations.contains(normalizedStation) && orderedStations.add(normalizedStation);
@@ -264,7 +264,29 @@ public class InterlockingPlanningService {
         return TrainServiceClass.fromStringOrDefault(raw, TrainServiceClass.RE);
     }
 
-    private String normalizeStationName(String raw) {
-        return raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+    private String normalizeRoutePoint(String raw) {
+        if (raw == null) {
+            return "";
+        }
+
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isBlank()) {
+            return "";
+        }
+
+        if (normalized.startsWith("hubid:")) {
+            String value = normalized.substring("hubid:".length()).trim();
+            return value.isBlank() ? "" : "hubid:" + value;
+        }
+        if (normalized.startsWith("hub:")) {
+            String value = normalized.substring("hub:".length()).trim();
+            return value.isBlank() ? "" : "hubid:" + value;
+        }
+        if (normalized.startsWith("station:")) {
+            String value = normalized.substring("station:".length()).trim();
+            return value.isBlank() ? "" : "station:" + value;
+        }
+
+        return normalized;
     }
 }

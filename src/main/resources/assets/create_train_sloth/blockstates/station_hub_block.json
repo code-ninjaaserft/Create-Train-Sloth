@@ -1,12 +1,12 @@
 {
   "variants": {
-    "depot=false,facing=north": { "model": "create_train_sloth:block/station_hub_block" },
-    "depot=false,facing=east":  { "model": "create_train_sloth:block/station_hub_block", "y": 90 },
-    "depot=false,facing=south": { "model": "create_train_sloth:block/station_hub_block", "y": 180 },
-    "depot=false,facing=west":  { "model": "create_train_sloth:block/station_hub_block", "y": 270 },
-    "depot=true,facing=north": { "model": "create_train_sloth:block/station_hub_block_depot" },
-    "depot=true,facing=east":  { "model": "create_train_sloth:block/station_hub_block_depot", "y": 90 },
-    "depot=true,facing=south": { "model": "create_train_sloth:block/station_hub_block_depot", "y": 180 },
-    "depot=true,facing=west":  { "model": "create_train_sloth:block/station_hub_block_depot", "y": 270 }
+    "depot=false,facing=north": { "model": "create_train_sloth:block/hub" },
+    "depot=false,facing=east":  { "model": "create_train_sloth:block/hub", "y": 90 },
+    "depot=false,facing=south": { "model": "create_train_sloth:block/hub", "y": 180 },
+    "depot=false,facing=west":  { "model": "create_train_sloth:block/hub", "y": 270 },
+    "depot=true,facing=north": { "model": "create_train_sloth:block/hub_depot" },
+    "depot=true,facing=east":  { "model": "create_train_sloth:block/hub_depot", "y": 90 },
+    "depot=true,facing=south": { "model": "create_train_sloth:block/hub_depot", "y": 180 },
+    "depot=true,facing=west":  { "model": "create_train_sloth:block/hub_depot", "y": 270 }
   }
 }
