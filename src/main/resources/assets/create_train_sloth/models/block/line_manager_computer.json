@@ -1,17 +1,18 @@
 {
   "textures": {
-    "side": "faultirtrains:block/train_casing_side",
-    "top": "faultirtrains:block/train_casing_top",
-    "bottom": "faultirtrains:block/train_casing_bottom",
-    "frame": "faultirtrains:block/brass_frame",
-    "screen": "faultirtrains:block/computer_screen",
-    "button": "faultirtrains:block/button_dark",
-    "glass": "faultirtrains:block/panel_glass"
+    "side": "create_train_sloth:block/train_casing_side",
+    "top": "create_train_sloth:block/train_casing_top",
+    "bottom": "create_train_sloth:block/train_casing_bottom",
+    "frame": "create_train_sloth:block/brass_frame",
+    "screen": "create_train_sloth:block/computer_screen",
+    "button": "create_train_sloth:block/button_dark",
+    "panel": "create_train_sloth:block/panel_glass",
+    "accent": "create_train_sloth:block/train_blue_accent"
   },
   "elements": [
     {
-      "from": [0, 0, 0],
-      "to": [16, 16, 16],
+      "from": [0, 0, 2],
+      "to": [16, 15, 16],
       "faces": {
         "down": { "texture": "#bottom" },
         "up": { "texture": "#top" },
@@ -22,45 +23,159 @@
       }
     },
     {
-      "from": [1, 1, 0],
-      "to": [15, 15, 1],
+      "from": [1, 1, 1],
+      "to": [2, 13, 2],
       "faces": {
-        "north": { "texture": "#frame" }
+        "north": { "texture": "#frame" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
       }
     },
     {
-      "from": [3, 7, 1],
-      "to": [13, 13, 2],
+      "from": [14, 1, 1],
+      "to": [15, 13, 2],
       "faces": {
-        "north": { "texture": "#screen" }
+        "north": { "texture": "#frame" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
       }
     },
     {
-      "from": [3, 2, 1],
-      "to": [5, 4, 2],
+      "from": [2, 1, 1],
+      "to": [14, 3, 2],
       "faces": {
-        "north": { "texture": "#button" }
+        "north": { "texture": "#frame" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
       }
     },
     {
-      "from": [6, 2, 1],
-      "to": [8, 4, 2],
+      "from": [2, 8, 0],
+      "to": [3, 14, 4],
       "faces": {
-        "north": { "texture": "#button" }
+        "north": { "texture": "#frame" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
       }
     },
     {
-      "from": [9, 2, 1],
-      "to": [11, 4, 2],
+      "from": [12, 8, 0],
+      "to": [13, 14, 4],
       "faces": {
-        "north": { "texture": "#button" }
+        "north": { "texture": "#frame" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
       }
     },
     {
-      "from": [12, 2, 1],
-      "to": [14, 4, 2],
+      "from": [3, 8, 1],
+      "to": [12, 14, 4],
       "faces": {
-        "north": { "texture": "#button" }
+        "north": { "texture": "#frame" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
+      }
+    },
+    {
+      "from": [4, 9, 0],
+      "to": [11, 13, 1],
+      "faces": {
+        "north": { "texture": "#screen" },
+        "south": { "texture": "#screen" },
+        "west": { "texture": "#screen" },
+        "east": { "texture": "#screen" },
+        "up": { "texture": "#screen" },
+        "down": { "texture": "#screen" }
+      }
+    },
+    {
+      "from": [3, 3, 1],
+      "to": [13, 7, 4],
+      "faces": {
+        "north": { "texture": "#accent" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
+      }
+    },
+    {
+      "from": [4, 4, 0],
+      "to": [5, 5, 1],
+      "faces": {
+        "north": { "texture": "#button" },
+        "south": { "texture": "#button" },
+        "west": { "texture": "#button" },
+        "east": { "texture": "#button" },
+        "up": { "texture": "#button" },
+        "down": { "texture": "#button" }
+      }
+    },
+    {
+      "from": [6, 4, 0],
+      "to": [7, 5, 1],
+      "faces": {
+        "north": { "texture": "#button" },
+        "south": { "texture": "#button" },
+        "west": { "texture": "#button" },
+        "east": { "texture": "#button" },
+        "up": { "texture": "#button" },
+        "down": { "texture": "#button" }
+      }
+    },
+    {
+      "from": [8, 4, 0],
+      "to": [9, 5, 1],
+      "faces": {
+        "north": { "texture": "#button" },
+        "south": { "texture": "#button" },
+        "west": { "texture": "#button" },
+        "east": { "texture": "#button" },
+        "up": { "texture": "#button" },
+        "down": { "texture": "#button" }
+      }
+    },
+    {
+      "from": [10, 4, 0],
+      "to": [11, 5, 1],
+      "faces": {
+        "north": { "texture": "#button" },
+        "south": { "texture": "#button" },
+        "west": { "texture": "#button" },
+        "east": { "texture": "#button" },
+        "up": { "texture": "#button" },
+        "down": { "texture": "#button" }
+      }
+    },
+    {
+      "from": [4, 15, 6],
+      "to": [12, 16, 12],
+      "faces": {
+        "north": { "texture": "#panel" },
+        "south": { "texture": "#panel" },
+        "west": { "texture": "#panel" },
+        "east": { "texture": "#panel" },
+        "up": { "texture": "#panel" },
+        "down": { "texture": "#panel" }
       }
     }
   ]

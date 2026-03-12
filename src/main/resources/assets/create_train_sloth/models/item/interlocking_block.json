@@ -1,3 +1,7 @@
 {
-  "parent": "create_train_sloth:block/train_router"
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "create_train_sloth:block/router_face",
+    "layer1": "create_train_sloth:block/train_blue_accent"
+  }
 }

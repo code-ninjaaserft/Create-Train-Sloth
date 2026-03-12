@@ -1,16 +1,18 @@
 {
   "textures": {
-    "side": "faultirtrains:block/train_casing_side",
-    "top": "faultirtrains:block/train_casing_top",
-    "bottom": "faultirtrains:block/train_casing_bottom",
-    "frame": "faultirtrains:block/brass_frame",
-    "router": "faultirtrains:block/router_face",
-    "port": "faultirtrains:block/port_dark"
+    "side": "create_train_sloth:block/train_casing_side",
+    "top": "create_train_sloth:block/train_casing_top",
+    "bottom": "create_train_sloth:block/train_casing_bottom",
+    "frame": "create_train_sloth:block/brass_frame",
+    "router": "create_train_sloth:block/router_face",
+    "port": "create_train_sloth:block/port_dark",
+    "accent": "create_train_sloth:block/train_blue_accent",
+    "panel": "create_train_sloth:block/panel_glass"
   },
   "elements": [
     {
-      "from": [0, 0, 0],
-      "to": [16, 16, 16],
+      "from": [0, 0, 2],
+      "to": [16, 15, 16],
       "faces": {
         "down": { "texture": "#bottom" },
         "up": { "texture": "#top" },
@@ -21,31 +23,99 @@
       }
     },
     {
-      "from": [1, 1, 0],
-      "to": [15, 15, 1],
-      "faces": {
-        "north": { "texture": "#frame" }
-      }
-    },
-    {
-      "from": [3, 5, 1],
+      "from": [3, 4, 1],
       "to": [13, 13, 2],
       "faces": {
-        "north": { "texture": "#router" }
+        "north": { "texture": "#frame" },
+        "south": { "texture": "#frame" },
+        "west": { "texture": "#frame" },
+        "east": { "texture": "#frame" },
+        "up": { "texture": "#frame" },
+        "down": { "texture": "#frame" }
       }
     },
     {
-      "from": [3, 2, 1],
-      "to": [6, 3, 2],
+      "from": [4, 5, 0],
+      "to": [12, 12, 4],
       "faces": {
-        "north": { "texture": "#port" }
+        "north": { "texture": "#router" },
+        "south": { "texture": "#router" },
+        "west": { "texture": "#router" },
+        "east": { "texture": "#router" },
+        "up": { "texture": "#router" },
+        "down": { "texture": "#router" }
       }
     },
     {
-      "from": [10, 2, 1],
-      "to": [13, 3, 2],
+      "from": [2, 2, 0],
+      "to": [6, 5, 4],
       "faces": {
-        "north": { "texture": "#port" }
+        "north": { "texture": "#port" },
+        "south": { "texture": "#port" },
+        "west": { "texture": "#port" },
+        "east": { "texture": "#port" },
+        "up": { "texture": "#port" },
+        "down": { "texture": "#port" }
+      }
+    },
+    {
+      "from": [10, 2, 0],
+      "to": [14, 5, 4],
+      "faces": {
+        "north": { "texture": "#port" },
+        "south": { "texture": "#port" },
+        "west": { "texture": "#port" },
+        "east": { "texture": "#port" },
+        "up": { "texture": "#port" },
+        "down": { "texture": "#port" }
+      }
+    },
+    {
+      "from": [6, 2, 0],
+      "to": [10, 3, 2],
+      "faces": {
+        "north": { "texture": "#accent" },
+        "south": { "texture": "#accent" },
+        "west": { "texture": "#accent" },
+        "east": { "texture": "#accent" },
+        "up": { "texture": "#accent" },
+        "down": { "texture": "#accent" }
+      }
+    },
+    {
+      "from": [4, 13, 0],
+      "to": [5, 16, 2],
+      "faces": {
+        "north": { "texture": "#accent" },
+        "south": { "texture": "#accent" },
+        "west": { "texture": "#accent" },
+        "east": { "texture": "#accent" },
+        "up": { "texture": "#accent" },
+        "down": { "texture": "#accent" }
+      }
+    },
+    {
+      "from": [11, 13, 0],
+      "to": [12, 16, 2],
+      "faces": {
+        "north": { "texture": "#accent" },
+        "south": { "texture": "#accent" },
+        "west": { "texture": "#accent" },
+        "east": { "texture": "#accent" },
+        "up": { "texture": "#accent" },
+        "down": { "texture": "#accent" }
+      }
+    },
+    {
+      "from": [5, 15, 6],
+      "to": [11, 16, 11],
+      "faces": {
+        "north": { "texture": "#panel" },
+        "south": { "texture": "#panel" },
+        "west": { "texture": "#panel" },
+        "east": { "texture": "#panel" },
+        "up": { "texture": "#panel" },
+        "down": { "texture": "#panel" }
       }
     }
   ]

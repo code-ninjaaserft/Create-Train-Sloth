@@ -36,9 +36,9 @@ public final class TrainSlothConfig {
             targetIntervalOverrideTicks = builder.comment("Global fixed interval override. <= 0 means dynamic from round-trip estimate.")
                 .defineInRange("targetIntervalOverrideTicks", -1, -1, 20 * 60 * 30);
             minimumDwellTicks = builder.comment("Minimum station dwell before a dispatched departure is allowed.")
-                .defineInRange("minimumDwellTicks", 100, 0, 20 * 60 * 10);
+                .defineInRange("minimumDwellTicks", 320, 0, 20 * 60 * 10);
             dwellExtensionTicks = builder.comment("Extra dwell added by dispatch control for stabilization.")
-                .defineInRange("dwellExtensionTicks", 20, 0, 20 * 60 * 10);
+                .defineInRange("dwellExtensionTicks", 60, 0, 20 * 60 * 10);
             safetyBufferTicks = builder.comment("Extra buffer applied to computed headway.")
                 .defineInRange("safetyBufferTicks", 40, 0, 20 * 60 * 10);
             fallbackRoundTripTicks = builder.comment("Fallback round-trip estimate when no telemetry exists.")

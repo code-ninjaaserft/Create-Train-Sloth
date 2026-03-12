@@ -47,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class InterlockingBlockEntity extends BlockEntity implements MenuProvider {
 
-    private static final long SNAPSHOT_INTERVAL_TICKS = 20L;
+    private static final long SNAPSHOT_INTERVAL_TICKS = 1L;
     private static final String TAG_AUTO_ROUTING = "AutoRoutingEnabled";
     private static final String TAG_LOCKED_SECTIONS = "LockedSections";
     private static final String TAG_SNAPSHOT = "SchematicSnapshot";
@@ -538,9 +538,12 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
         boolean changed = false;
 
         if (force || level.getGameTime() - lastSnapshotTick >= SNAPSHOT_INTERVAL_TICKS) {
-            schematicSnapshot = schematicBuilder.build(level, lockedSectionIds());
+            StellwerkSchematicSnapshot updatedSnapshot = schematicBuilder.build(level, lockedSectionIds());
+            if (force || !sameOperationalSchematic(schematicSnapshot, updatedSnapshot)) {
+                changed = true;
+            }
+            schematicSnapshot = updatedSnapshot;
             lastSnapshotTick = level.getGameTime();
-            changed = true;
         }
 
         if (refreshControlData(level)) {
@@ -981,6 +984,16 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             case OCCUPIED -> 2;
             case BLOCKED -> 3;
         };
+    }
+
+    private boolean sameOperationalSchematic(StellwerkSchematicSnapshot previous, StellwerkSchematicSnapshot current) {
+        if (previous == null || current == null) {
+            return false;
+        }
+        return previous.networkLabel().equals(current.networkLabel())
+            && previous.nodes().equals(current.nodes())
+            && previous.sections().equals(current.sections())
+            && previous.trains().equals(current.trains());
     }
 
     private record PublishedStationState(StellwerkSectionState state, long updatedAtTick) {

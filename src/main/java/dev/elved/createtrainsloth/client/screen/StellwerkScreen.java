@@ -44,6 +44,12 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
     private static final int CONTROL_Y = 30;
 
     private final Map<Integer, ProjectedNode> projectedNodes = new HashMap<>();
+    private StellwerkSchematicSnapshot projectionSnapshot = StellwerkSchematicSnapshot.empty();
+    private double projectionZoom = Double.NaN;
+    private double projectionPanX = Double.NaN;
+    private double projectionPanY = Double.NaN;
+    private int projectionLeftPos = Integer.MIN_VALUE;
+    private int projectionTopPos = Integer.MIN_VALUE;
     private int selectedSection = -1;
     private double zoom = 1.0D;
     private double panX;
@@ -108,7 +114,10 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
             18,
             14,
             Component.literal("+"),
-            button -> zoom = Mth.clamp(zoom + 0.15D, 0.6D, 2.25D)
+            button -> {
+                zoom = Mth.clamp(zoom + 0.15D, 0.6D, 2.25D);
+                invalidateProjectionCache();
+            }
         ));
         addRenderableWidget(new StellwerkStyledButton(
             controlsX + 20,
@@ -116,7 +125,10 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
             18,
             14,
             Component.literal("-"),
-            button -> zoom = Mth.clamp(zoom - 0.15D, 0.6D, 2.25D)
+            button -> {
+                zoom = Mth.clamp(zoom - 0.15D, 0.6D, 2.25D);
+                invalidateProjectionCache();
+            }
         ));
         addRenderableWidget(new StellwerkStyledButton(
             controlsX + 40,
@@ -128,6 +140,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
                 zoom = 1.0D;
                 panX = 0D;
                 panY = 0D;
+                invalidateProjectionCache();
             }
         ));
         updateButtonState();
@@ -209,6 +222,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         if (button == 0 && insideMap(mouseX, mouseY)) {
             panX = Mth.clamp(panX + dragX, -MAP_W / 2D, MAP_W / 2D);
             panY = Mth.clamp(panY + dragY, -MAP_H / 2D, MAP_H / 2D);
+            invalidateProjectionCache();
             return true;
         }
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
@@ -216,8 +230,8 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
 
     private void drawSchematic(GuiGraphics graphics) {
         StellwerkSchematicSnapshot snapshot = snapshot();
-        projectedNodes.clear();
-        if (snapshot.nodes().isEmpty()) {
+        ensureProjectionCache(snapshot);
+        if (snapshot.nodes().isEmpty() || projectedNodes.isEmpty()) {
             return;
         }
 
@@ -226,27 +240,6 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         int clipMaxX = clipMinX + MAP_W;
         int clipMaxY = clipMinY + MAP_H;
         graphics.enableScissor(clipMinX, clipMinY, clipMaxX, clipMaxY);
-
-        double minX = snapshot.nodes().stream().mapToDouble(StellwerkNodeView::x).min().orElse(0D);
-        double maxX = snapshot.nodes().stream().mapToDouble(StellwerkNodeView::x).max().orElse(1D);
-        double minZ = snapshot.nodes().stream().mapToDouble(StellwerkNodeView::z).min().orElse(0D);
-        double maxZ = snapshot.nodes().stream().mapToDouble(StellwerkNodeView::z).max().orElse(1D);
-
-        double spanX = Math.max(1D, maxX - minX);
-        double spanZ = Math.max(1D, maxZ - minZ);
-        double centerX = leftPos + MAP_X + MAP_W / 2D;
-        double centerY = topPos + MAP_Y + MAP_H / 2D;
-
-        for (StellwerkNodeView node : snapshot.nodes()) {
-            double normalizedX = (node.x() - minX) / spanX;
-            double normalizedZ = (node.z() - minZ) / spanZ;
-            double rawX = leftPos + MAP_X + 6 + normalizedX * (MAP_W - 12);
-            double rawY = topPos + MAP_Y + MAP_H - 6 - normalizedZ * (MAP_H - 12);
-
-            int projectedX = Mth.floor(centerX + (rawX - centerX) * zoom + panX);
-            int projectedY = Mth.floor(centerY + (rawY - centerY) * zoom + panY);
-            projectedNodes.put(node.index(), new ProjectedNode(projectedX, projectedY));
-        }
 
         for (StellwerkSectionView section : snapshot.sections()) {
             ProjectedNode from = projectedNodes.get(section.fromNodeIndex());
@@ -369,6 +362,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
 
     private int nearestSectionIndex(double mouseX, double mouseY) {
         StellwerkSchematicSnapshot snapshot = snapshot();
+        ensureProjectionCache(snapshot);
         double bestDistanceSq = Double.MAX_VALUE;
         int bestIndex = -1;
         for (StellwerkSectionView section : snapshot.sections()) {
@@ -385,6 +379,74 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
             }
         }
         return bestDistanceSq <= 49D ? bestIndex : -1;
+    }
+
+    private void ensureProjectionCache(StellwerkSchematicSnapshot snapshot) {
+        if (snapshot == null) {
+            snapshot = StellwerkSchematicSnapshot.empty();
+        }
+
+        boolean dirty = snapshot != projectionSnapshot
+            || zoom != projectionZoom
+            || panX != projectionPanX
+            || panY != projectionPanY
+            || leftPos != projectionLeftPos
+            || topPos != projectionTopPos;
+        if (!dirty) {
+            return;
+        }
+
+        projectionSnapshot = snapshot;
+        projectionZoom = zoom;
+        projectionPanX = panX;
+        projectionPanY = panY;
+        projectionLeftPos = leftPos;
+        projectionTopPos = topPos;
+        projectedNodes.clear();
+
+        if (snapshot.nodes().isEmpty()) {
+            return;
+        }
+
+        double minX = Double.POSITIVE_INFINITY;
+        double maxX = Double.NEGATIVE_INFINITY;
+        double minZ = Double.POSITIVE_INFINITY;
+        double maxZ = Double.NEGATIVE_INFINITY;
+        for (StellwerkNodeView node : snapshot.nodes()) {
+            minX = Math.min(minX, node.x());
+            maxX = Math.max(maxX, node.x());
+            minZ = Math.min(minZ, node.z());
+            maxZ = Math.max(maxZ, node.z());
+        }
+
+        if (!Double.isFinite(minX) || !Double.isFinite(minZ)) {
+            return;
+        }
+
+        double spanX = Math.max(1D, maxX - minX);
+        double spanZ = Math.max(1D, maxZ - minZ);
+        double centerX = leftPos + MAP_X + MAP_W / 2D;
+        double centerY = topPos + MAP_Y + MAP_H / 2D;
+
+        for (StellwerkNodeView node : snapshot.nodes()) {
+            double normalizedX = (node.x() - minX) / spanX;
+            double normalizedZ = (node.z() - minZ) / spanZ;
+            double rawX = leftPos + MAP_X + 6 + normalizedX * (MAP_W - 12);
+            double rawY = topPos + MAP_Y + MAP_H - 6 - normalizedZ * (MAP_H - 12);
+
+            int projectedX = Mth.floor(centerX + (rawX - centerX) * zoom + panX);
+            int projectedY = Mth.floor(centerY + (rawY - centerY) * zoom + panY);
+            projectedNodes.put(node.index(), new ProjectedNode(projectedX, projectedY));
+        }
+    }
+
+    private void invalidateProjectionCache() {
+        projectionSnapshot = StellwerkSchematicSnapshot.empty();
+        projectionZoom = Double.NaN;
+        projectionPanX = Double.NaN;
+        projectionPanY = Double.NaN;
+        projectionLeftPos = Integer.MIN_VALUE;
+        projectionTopPos = Integer.MIN_VALUE;
     }
 
     private static double pointToSegmentDistanceSq(double px, double py, double x1, double y1, double x2, double y2) {

@@ -31,6 +31,7 @@ import net.minecraft.world.level.Level;
 public class DispatchController {
 
     private static final int DISPATCH_TOKEN_DURATION = 40;
+    private static final int ENFORCED_MINIMUM_DWELL_TICKS = 220;
 
     private final LineManager lineManager;
     private final StationStateTracker stationStateTracker;
@@ -209,6 +210,7 @@ public class DispatchController {
         }
 
         int minimumDwell = line.settings().resolveMinimumDwellTicks() + line.settings().resolveDwellExtensionTicks();
+        minimumDwell = Math.max(ENFORCED_MINIMUM_DWELL_TICKS, minimumDwell);
         long dwellElapsed = Math.max(0, gameTick - arrivedAt);
         if (dwellElapsed < minimumDwell) {
             return DispatchDecision.hold("minimum dwell " + dwellElapsed + "/" + minimumDwell);
