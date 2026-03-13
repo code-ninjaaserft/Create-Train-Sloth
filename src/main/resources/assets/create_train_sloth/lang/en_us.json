@@ -62,6 +62,7 @@
   "create_train_sloth.stellwerk.button.auto_off": "Auto: Off",
   "create_train_sloth.stellwerk.button.generate_lines": "Generate",
   "create_train_sloth.stellwerk.button.mission_ping": "Mission Ping",
+  "create_train_sloth.stellwerk.button.router_ping": "Router Ping",
   "create_train_sloth.stellwerk.button.assign_line": "Set",
   "create_train_sloth.stellwerk.button.unassign_line": "Clear",
   "create_train_sloth.stellwerk.button.center": "C",
@@ -90,5 +91,11 @@
   "create_train_sloth.stellwerk.route_creator.button.add": "Add",
   "create_train_sloth.stellwerk.route_creator.button.remove": "Remove",
   "create_train_sloth.line_manager.title": "Line Manager",
-  "create_train_sloth.line_manager.button.generate": "Generate"
+  "create_train_sloth.line_manager.button.generate": "Generate",
+  "create_train_sloth.line_manager.button.manual_mode_on": "Manual",
+  "create_train_sloth.line_manager.button.manual_mode_off": "Auto",
+  "create_train_sloth.line_manager.button.depot_toggle": "Depot",
+  "create_train_sloth.line_manager.target_count": "Target: %s",
+  "create_train_sloth.line_manager.depots_any": "Depots: any",
+  "create_train_sloth.line_manager.depots_limited": "Depots: %s"
 }

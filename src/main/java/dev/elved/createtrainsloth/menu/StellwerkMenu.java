@@ -24,6 +24,7 @@ public class StellwerkMenu extends AbstractContainerMenu {
     public static final int BUTTON_LINE_PREV = 15;
     public static final int BUTTON_LINE_NEXT = 16;
     public static final int BUTTON_TRIGGER_MISSION_PING = 17;
+    public static final int BUTTON_TRIGGER_ROUTER_PING = 18;
     public static final int BUTTON_LOCK_SECTION_BASE = 1_000;
     public static final int BUTTON_UNLOCK_SECTION_BASE = 2_000;
     public static final int BUTTON_SECTION_INDEX_LIMIT = 9_999;
@@ -154,6 +155,10 @@ public class StellwerkMenu extends AbstractContainerMenu {
 
         if (id == BUTTON_TRIGGER_MISSION_PING) {
             return blockEntity.triggerManualMissionPing();
+        }
+
+        if (id == BUTTON_TRIGGER_ROUTER_PING) {
+            return blockEntity.triggerManualRouterPing();
         }
 
         if (id >= BUTTON_LOCK_SECTION_BASE && id <= BUTTON_LOCK_SECTION_BASE + BUTTON_SECTION_INDEX_LIMIT) {

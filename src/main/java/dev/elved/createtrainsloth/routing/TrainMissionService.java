@@ -73,6 +73,14 @@ public class TrainMissionService {
     }
 
     private void ensureMission(Train train, Optional<TrainLine> line, DebugOverlay debugOverlay) {
+        if (line.isEmpty()) {
+            missionByTrain.remove(train.id);
+            if (debugOverlay != null) {
+                debugOverlay.clearMission(train.id);
+            }
+            return;
+        }
+
         MissionState state = missionByTrain.computeIfAbsent(train.id, ignored -> new MissionState());
         if (!state.destinations.isEmpty()) {
             return;
@@ -88,13 +96,6 @@ public class TrainMissionService {
                     + " current=" + (currentLocation == null ? "<unknown>" : currentLocation)
                     + " queue=empty"
             );
-        }
-
-        if (line.isEmpty()) {
-            if (debugOverlay != null) {
-                debugOverlay.recordMission(train.id, "MISSION_WAIT reason=no_line_assignment");
-            }
-            return;
         }
 
         List<String> orderedStops = new ArrayList<>(line.get().stationNames());

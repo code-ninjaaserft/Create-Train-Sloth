@@ -18,6 +18,9 @@ public class LineManagerComputerMenu extends AbstractContainerMenu {
     public static final int BUTTON_GENERATE_LINES = 0;
     public static final int BUTTON_LINE_PREV = 1;
     public static final int BUTTON_LINE_NEXT = 2;
+    public static final int BUTTON_TOGGLE_MANUAL_TRAIN_COUNT = 3;
+    public static final int BUTTON_MANUAL_TRAIN_COUNT_DEC = 4;
+    public static final int BUTTON_MANUAL_TRAIN_COUNT_INC = 5;
 
     private final BlockPos blockPos;
     private final Level level;
@@ -109,6 +112,15 @@ public class LineManagerComputerMenu extends AbstractContainerMenu {
         if (id == BUTTON_LINE_NEXT) {
             return blockEntity.cycleLineSelection(1);
         }
+        if (id == BUTTON_TOGGLE_MANUAL_TRAIN_COUNT) {
+            return blockEntity.toggleSelectedLineManualTrainCount();
+        }
+        if (id == BUTTON_MANUAL_TRAIN_COUNT_DEC) {
+            return blockEntity.adjustSelectedLineManualTrainCount(-1);
+        }
+        if (id == BUTTON_MANUAL_TRAIN_COUNT_INC) {
+            return blockEntity.adjustSelectedLineManualTrainCount(1);
+        }
         return false;
     }
 
@@ -165,6 +177,24 @@ public class LineManagerComputerMenu extends AbstractContainerMenu {
             return 0;
         }
         return blockEntity.selectedLineRecommendedTrainCount();
+    }
+
+    public int selectedLineTargetTrainCount() {
+        if (blockEntity == null) {
+            return 0;
+        }
+        return blockEntity.selectedLineTargetTrainCount();
+    }
+
+    public boolean selectedLineUsesManualTrainCount() {
+        return blockEntity != null && blockEntity.selectedLineUsesManualTrainCount();
+    }
+
+    public List<String> selectedAllowedDepotHubs() {
+        if (blockEntity == null) {
+            return List.of();
+        }
+        return blockEntity.selectedAllowedDepotHubs();
     }
 
     @Nullable

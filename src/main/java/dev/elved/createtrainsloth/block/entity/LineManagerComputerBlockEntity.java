@@ -9,10 +9,13 @@ import dev.elved.createtrainsloth.line.TrainLine;
 import dev.elved.createtrainsloth.line.TrainServiceClass;
 import dev.elved.createtrainsloth.menu.LineManagerComputerMenu;
 import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
+import dev.elved.createtrainsloth.station.StationHub;
+import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -42,12 +45,14 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
     private static final String TAG_SELECTED_LINE_STATIONS = "SelectedLineStations";
     private static final String TAG_SELECTED_LINE_NAME = "SelectedLineName";
     private static final String TAG_SELECTED_SERVICE_CLASS = "SelectedServiceClass";
+    private static final String TAG_SELECTED_ALLOWED_DEPOT_HUBS = "SelectedAllowedDepotHubs";
     private static final String TAG_ROUTE_SERVICE_CLASSES = "RouteServiceClasses";
     private static final String TAG_ROUTE_STATIONS = "RouteStations";
 
     private final List<String> syncedLineIds = new ArrayList<>();
     private final Map<UUID, String> syncedAssignments = new LinkedHashMap<>();
     private final List<String> syncedSelectedLineStations = new ArrayList<>();
+    private final List<String> syncedSelectedAllowedDepotHubs = new ArrayList<>();
     private final Map<String, TrainServiceClass> routeServiceByLine = new LinkedHashMap<>();
     private final Map<String, List<String>> routeStationsByLine = new LinkedHashMap<>();
     private final InterlockingPlanningService interlockingPlanningService = new InterlockingPlanningService();
@@ -134,6 +139,44 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
             return 0;
         }
 
+        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
+        TrainLine line = lineRegistry == null ? null : lineRegistry.findLine(new LineId(lineId)).orElse(null);
+        return recommendedTrainCount(line);
+    }
+
+    public int selectedLineTargetTrainCount() {
+        String lineId = selectedLineLabel();
+        if ("-".equals(lineId)) {
+            return 0;
+        }
+
+        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
+        TrainLine line = lineRegistry == null ? null : lineRegistry.findLine(new LineId(lineId)).orElse(null);
+        if (line == null) {
+            return selectedLineRecommendedTrainCount();
+        }
+        return line.settings().resolveTargetTrainCount(recommendedTrainCount(line));
+    }
+
+    public boolean selectedLineUsesManualTrainCount() {
+        String lineId = selectedLineLabel();
+        if ("-".equals(lineId)) {
+            return false;
+        }
+
+        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
+        if (lineRegistry == null) {
+            return false;
+        }
+        TrainLine line = lineRegistry.findLine(new LineId(lineId)).orElse(null);
+        return line != null && line.settings().hasManualTrainCount();
+    }
+
+    public List<String> selectedAllowedDepotHubs() {
+        return List.copyOf(syncedSelectedAllowedDepotHubs);
+    }
+
+    private int recommendedTrainCount(@Nullable TrainLine line) {
         LinePlanningService planningService = CreateTrainSlothMod.runtime().linePlanningService();
         if (planningService == null) {
             int stationCount = Math.max(1, syncedSelectedLineStations.size());
@@ -150,8 +193,6 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
             return Math.max(1, Math.min(12, recommended));
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        TrainLine line = lineRegistry == null ? null : lineRegistry.findLine(new LineId(lineId)).orElse(null);
         return planningService.recommendedTrainCount(line, syncedSelectedLineStations.size(), syncedSelectedServiceClass);
     }
 
@@ -165,6 +206,139 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
         }
         setChangedAndSync();
         return true;
+    }
+
+    public boolean toggleSelectedLineManualTrainCount() {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+
+        String lineId = selectedLineLabel();
+        if ("-".equals(lineId)) {
+            return false;
+        }
+
+        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
+        if (lineRegistry == null) {
+            return false;
+        }
+
+        TrainLine line = lineRegistry.findLine(new LineId(lineId)).orElse(null);
+        if (line == null) {
+            return false;
+        }
+
+        if (line.settings().hasManualTrainCount()) {
+            line.settings().clearManualTrainCount();
+        } else {
+            int recommended = recommendedTrainCount(line);
+            line.settings().setManualTrainCount(Math.max(1, recommended));
+        }
+
+        lineRegistry.markDirty();
+        refreshControlData(level, true);
+        setChangedAndSync();
+        return true;
+    }
+
+    public boolean adjustSelectedLineManualTrainCount(int delta) {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+        if (delta == 0) {
+            return false;
+        }
+
+        String lineId = selectedLineLabel();
+        if ("-".equals(lineId)) {
+            return false;
+        }
+
+        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
+        if (lineRegistry == null) {
+            return false;
+        }
+
+        TrainLine line = lineRegistry.findLine(new LineId(lineId)).orElse(null);
+        if (line == null) {
+            return false;
+        }
+
+        int currentTarget = line.settings().hasManualTrainCount()
+            ? line.settings().getManualTrainCountRaw()
+            : Math.max(1, recommendedTrainCount(line));
+        line.settings().setManualTrainCount(currentTarget + delta);
+
+        lineRegistry.markDirty();
+        refreshControlData(level, true);
+        setChangedAndSync();
+        return true;
+    }
+
+    public boolean toggleLineDepotHub(String lineIdRaw, String hubIdRaw) {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+
+        String lineId = lineIdRaw == null ? "" : lineIdRaw.trim();
+        if (lineId.isBlank() || "-".equals(lineId)) {
+            return false;
+        }
+
+        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
+        if (lineRegistry == null) {
+            return false;
+        }
+
+        TrainLine line = lineRegistry.findLine(new LineId(lineId)).orElse(null);
+        if (line == null) {
+            return false;
+        }
+
+        String normalizedHubId = normalizeDepotHubId(hubIdRaw);
+        if (normalizedHubId.isBlank()) {
+            return false;
+        }
+
+        StationHubRegistry stationHubRegistry = CreateTrainSlothMod.runtime().stationHubRegistry();
+        String resolvedHubId = normalizedHubId;
+        if (stationHubRegistry != null) {
+            Optional<StationHub> resolvedHub = stationHubRegistry.findHubForScheduleFilter(normalizedHubId);
+            if (resolvedHub.isPresent()) {
+                resolvedHubId = resolvedHub.get().id().value();
+                if (!resolvedHub.get().isDepotHub() && !line.settings().allowedDepotHubIds().contains(resolvedHubId)) {
+                    return false;
+                }
+            } else if (!line.settings().allowedDepotHubIds().contains(normalizedHubId)) {
+                // Unknown ids may still be removed if they already exist, but should not be newly added.
+                return false;
+            }
+        }
+        if (!line.settings().toggleAllowedDepotHubId(resolvedHubId)) {
+            return false;
+        }
+
+        lineRegistry.markDirty();
+        refreshControlData(level, true);
+        setChangedAndSync();
+        return true;
+    }
+
+    private String normalizeDepotHubId(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if (value.startsWith("hubid:")) {
+            return value.substring("hubid:".length()).trim();
+        }
+        if (value.startsWith("hub:")) {
+            return value.substring("hub:".length()).trim();
+        }
+        if (value.startsWith("station:")) {
+            return value.substring("station:".length()).trim();
+        }
+        return value;
     }
 
     public boolean generateLinesFromHubs() {
@@ -358,6 +532,7 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
             boolean changed = !syncedLineIds.isEmpty()
                 || !syncedAssignments.isEmpty()
                 || !syncedSelectedLineStations.isEmpty()
+                || !syncedSelectedAllowedDepotHubs.isEmpty()
                 || !routeServiceByLine.isEmpty()
                 || !routeStationsByLine.isEmpty()
                 || !"-".equals(syncedSelectedLineName)
@@ -365,6 +540,7 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
             syncedLineIds.clear();
             syncedAssignments.clear();
             syncedSelectedLineStations.clear();
+            syncedSelectedAllowedDepotHubs.clear();
             routeServiceByLine.clear();
             routeStationsByLine.clear();
             syncedSelectedLineName = "-";
@@ -391,13 +567,14 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
                 continue;
             }
 
-            TrainServiceClass serviceClass = routeServiceByLine.get(lineId);
-            if (serviceClass == null) {
-                serviceClass = lineRegistry.assignments().values().stream()
-                    .filter(assignment -> assignment.lineId().value().equals(lineId))
-                    .map(assignment -> assignment.serviceClass())
-                    .findFirst()
-                    .orElse(TrainServiceClass.RE);
+            TrainServiceClass serviceClass = line.settings().resolveServiceClass();
+            TrainServiceClass cachedServiceClass = routeServiceByLine.get(lineId);
+            if (cachedServiceClass != null && serviceClass == TrainServiceClass.RE && cachedServiceClass != TrainServiceClass.RE) {
+                serviceClass = cachedServiceClass;
+            }
+            if (line.settings().resolveServiceClass() != serviceClass) {
+                line.settings().setServiceClass(serviceClass);
+                lineRegistry.markDirty();
             }
             updatedRouteServices.put(lineId, serviceClass);
 
@@ -445,10 +622,12 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
 
         String lineName = "-";
         TrainServiceClass selectedClass = TrainServiceClass.RE;
+        List<String> selectedAllowedDepotHubs = List.of();
         if (!"-".equals(selectedLineId)) {
             TrainLine selectedLine = lineRegistry.findLine(new LineId(selectedLineId)).orElse(null);
             if (selectedLine != null) {
                 lineName = selectedLine.displayName();
+                selectedAllowedDepotHubs = new ArrayList<>(selectedLine.settings().allowedDepotHubIds());
             }
             selectedClass = routeServiceByLine.getOrDefault(selectedLineId, TrainServiceClass.RE);
         }
@@ -466,6 +645,12 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
 
         if (syncedSelectedServiceClass != selectedClass) {
             syncedSelectedServiceClass = selectedClass;
+            changed = true;
+        }
+
+        if (!syncedSelectedAllowedDepotHubs.equals(selectedAllowedDepotHubs)) {
+            syncedSelectedAllowedDepotHubs.clear();
+            syncedSelectedAllowedDepotHubs.addAll(selectedAllowedDepotHubs);
             changed = true;
         }
 
@@ -545,6 +730,12 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
         }
         tag.put(TAG_SELECTED_LINE_STATIONS, lineStationsTag);
 
+        ListTag allowedDepotHubsTag = new ListTag();
+        for (String hubId : syncedSelectedAllowedDepotHubs) {
+            allowedDepotHubsTag.add(StringTag.valueOf(hubId));
+        }
+        tag.put(TAG_SELECTED_ALLOWED_DEPOT_HUBS, allowedDepotHubsTag);
+
         ListTag routeServiceTag = new ListTag();
         for (Map.Entry<String, TrainServiceClass> entry : routeServiceByLine.entrySet()) {
             CompoundTag routeService = new CompoundTag();
@@ -588,6 +779,11 @@ public class LineManagerComputerBlockEntity extends BlockEntity implements MenuP
         syncedSelectedLineStations.clear();
         for (Tag element : tag.getList(TAG_SELECTED_LINE_STATIONS, Tag.TAG_STRING)) {
             syncedSelectedLineStations.add(element.getAsString());
+        }
+
+        syncedSelectedAllowedDepotHubs.clear();
+        for (Tag element : tag.getList(TAG_SELECTED_ALLOWED_DEPOT_HUBS, Tag.TAG_STRING)) {
+            syncedSelectedAllowedDepotHubs.add(element.getAsString());
         }
 
         syncedSelectedLineName = tag.contains(TAG_SELECTED_LINE_NAME, Tag.TAG_STRING)

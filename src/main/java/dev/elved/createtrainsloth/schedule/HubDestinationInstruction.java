@@ -108,6 +108,10 @@ public class HubDestinationInstruction extends DestinationInstruction {
             if (response.hasPath()) {
                 return response.path();
             }
+            if ("recall_in_progress".equals(response.reason())) {
+                runtime.startCooldown();
+                return null;
+            }
 
             DiscoveredPath legacyFallbackPath = resolveLegacyHubPath(train);
             if (legacyFallbackPath != null) {

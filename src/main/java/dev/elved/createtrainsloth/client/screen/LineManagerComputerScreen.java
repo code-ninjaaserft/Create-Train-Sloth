@@ -41,12 +41,16 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
     private Button generateButton;
     private Button linePrevButton;
     private Button lineNextButton;
+    private Button manualCountModeButton;
+    private Button manualCountDecButton;
+    private Button manualCountIncButton;
     private Button servicePrevButton;
     private Button serviceNextButton;
     private Button createRouteButton;
     private Button applyMetaButton;
     private Button deleteRouteButton;
     private Button addHubButton;
+    private Button toggleDepotHubButton;
     private Button addStationButton;
     private Button removeStationButton;
     private EditBox createRouteNameInput;
@@ -79,6 +83,31 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             14,
             Component.translatable("create_train_sloth.line_manager.button.generate"),
             button -> sendMenuButton(LineManagerComputerMenu.BUTTON_GENERATE_LINES)
+        ));
+
+        manualCountModeButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 120,
+            topPos + 20,
+            52,
+            14,
+            manualCountModeText(),
+            button -> sendMenuButton(LineManagerComputerMenu.BUTTON_TOGGLE_MANUAL_TRAIN_COUNT)
+        ));
+        manualCountDecButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 174,
+            topPos + 20,
+            18,
+            14,
+            Component.literal("-"),
+            button -> sendMenuButton(LineManagerComputerMenu.BUTTON_MANUAL_TRAIN_COUNT_DEC)
+        ));
+        manualCountIncButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 194,
+            topPos + 20,
+            18,
+            14,
+            Component.literal("+"),
+            button -> sendMenuButton(LineManagerComputerMenu.BUTTON_MANUAL_TRAIN_COUNT_INC)
         ));
 
         linePrevButton = addRenderableWidget(new RouteStyledButton(
@@ -153,10 +182,18 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         addHubButton = addRenderableWidget(new RouteStyledButton(
             contentLeft + 130,
             topPos + 152,
-            82,
+            40,
             14,
             Component.literal("Hub +"),
             button -> addHub()
+        ));
+        toggleDepotHubButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 172,
+            topPos + 152,
+            40,
+            14,
+            Component.translatable("create_train_sloth.line_manager.button.depot_toggle"),
+            button -> toggleDepotHub()
         ));
 
         stationInput = new EditBox(font, contentLeft, topPos + 168, 128, 14, Component.empty());
@@ -189,6 +226,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         if (!menu.selectedLineLabel().equals(lastSelectedLine)) {
             syncFromMenuSelection();
         }
+        manualCountModeButton.setMessage(manualCountModeText());
         clampSelectionAndScroll();
         updateButtonState();
     }
@@ -221,6 +259,11 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
                 menu.selectedLineAssignedTrainCount()
             ).getString();
             graphics.drawString(font, trimToWidth(recommendation, 140), 12, 20, 0xD7CEB8, false);
+            String target = Component.translatable(
+                "create_train_sloth.line_manager.target_count",
+                menu.selectedLineTargetTrainCount()
+            ).getString();
+            graphics.drawString(font, trimToWidth(target, 72), 152, 20, 0xD7CEB8, false);
         } else {
             graphics.drawString(
                 font,
@@ -240,6 +283,13 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             false
         );
         graphics.drawString(font, trimToWidth(menu.selectedLineLabel(), 160), 34, 35, 0xF6ECD4, false);
+        String depotInfo = menu.selectedAllowedDepotHubs().isEmpty()
+            ? Component.translatable("create_train_sloth.line_manager.depots_any").getString()
+            : Component.translatable(
+                "create_train_sloth.line_manager.depots_limited",
+                String.join(",", menu.selectedAllowedDepotHubs())
+            ).getString();
+        graphics.drawString(font, trimToWidth(depotInfo, 96), 128, 35, 0x8FD8FF, false);
 
         graphics.drawString(
             font,
@@ -275,7 +325,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             0xD7CEB8,
             false
         );
-        graphics.drawString(font, Component.literal("Hub"), 12, 144, 0x8FD8FF, false);
+        graphics.drawString(font, Component.literal("Hub / Depot"), 12, 144, 0x8FD8FF, false);
         graphics.drawString(font, Component.literal("Station"), 12, 160, 0xA8E6A1, false);
 
         List<String> stations = routeStations();
@@ -456,6 +506,16 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         hubInput.setValue("");
     }
 
+    private void toggleDepotHub() {
+        String lineId = menu.selectedLineLabel();
+        String hubId = normalizeDepotHubId(hubInput.getValue());
+        if ("-".equals(lineId) || hubId.isBlank()) {
+            return;
+        }
+        PacketDistributor.sendToServer(EditStellwerkRoutePayload.toggleDepotHub(menu.blockPos(), lineId, hubId));
+        hubInput.setValue("");
+    }
+
     private void removeSelectedStation() {
         List<String> stations = routeStations();
         String lineId = menu.selectedLineLabel();
@@ -557,6 +617,9 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         generateButton.active = true;
         linePrevButton.active = menu.lineCount() > 0;
         lineNextButton.active = menu.lineCount() > 0;
+        manualCountModeButton.active = hasLine;
+        manualCountDecButton.active = hasLine && menu.selectedLineUsesManualTrainCount();
+        manualCountIncButton.active = hasLine && menu.selectedLineUsesManualTrainCount();
         servicePrevButton.active = true;
         serviceNextButton.active = true;
         createRouteButton.active = !createRouteNameInput.getValue().trim().isBlank();
@@ -565,6 +628,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         addHubButton.active = hasLine && !hubInput.getValue().trim().isBlank();
         addStationButton.active = hasLine && !stationInput.getValue().trim().isBlank();
         removeStationButton.active = hasLine && hasSelection;
+        toggleDepotHubButton.active = hasLine && !normalizeDepotHubId(hubInput.getValue()).isBlank();
     }
 
     private int colorForRoutePoint(String routePointRaw) {
@@ -627,6 +691,21 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         return value.isBlank() ? "" : "station:" + value;
     }
 
+    private String normalizeDepotHubId(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if (value.startsWith("hubid:")) {
+            value = value.substring("hubid:".length()).trim();
+        } else if (value.startsWith("hub:")) {
+            value = value.substring("hub:".length()).trim();
+        } else if (value.startsWith("station:")) {
+            value = value.substring("station:".length()).trim();
+        }
+        return value;
+    }
+
     private String trimToWidth(String value, int maxWidth) {
         if (value == null || value.isBlank()) {
             return "-";
@@ -635,6 +714,14 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             return value;
         }
         return font.plainSubstrByWidth(value, Math.max(0, maxWidth - font.width("..."))) + "...";
+    }
+
+    private Component manualCountModeText() {
+        return Component.translatable(
+            menu.selectedLineUsesManualTrainCount()
+                ? "create_train_sloth.line_manager.button.manual_mode_on"
+                : "create_train_sloth.line_manager.button.manual_mode_off"
+        );
     }
 
     private static class RouteStyledButton extends Button {

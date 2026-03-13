@@ -1,7 +1,13 @@
 package dev.elved.createtrainsloth.line;
 
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.StringTag;
+import net.minecraft.nbt.Tag;
 
 public class LineSettings {
 
@@ -13,6 +19,9 @@ public class LineSettings {
     private double resynchronizationAggressiveness = -1D;
     private int routeSwitchCooldownTicks = -1;
     private int routeReplanWaitTicks = -1;
+    private TrainServiceClass serviceClass = TrainServiceClass.RE;
+    private int manualTrainCount = -1;
+    private final List<String> allowedDepotHubIds = new ArrayList<>();
 
     public int resolveMinimumIntervalTicks() {
         return minimumIntervalTicks > 0 ? minimumIntervalTicks : TrainSlothConfig.DISPATCH.minimumIntervalTicks.get();
@@ -44,6 +53,35 @@ public class LineSettings {
 
     public int resolveRouteReplanWaitTicks() {
         return routeReplanWaitTicks >= 0 ? routeReplanWaitTicks : TrainSlothConfig.ROUTING.replanWaitTicks.get();
+    }
+
+    public TrainServiceClass resolveServiceClass() {
+        return serviceClass == null ? TrainServiceClass.RE : serviceClass;
+    }
+
+    public boolean hasManualTrainCount() {
+        return manualTrainCount > 0;
+    }
+
+    public int resolveTargetTrainCount(int recommendedTrainCount) {
+        int recommended = Math.max(1, recommendedTrainCount);
+        return hasManualTrainCount() ? Math.max(1, manualTrainCount) : recommended;
+    }
+
+    public List<String> allowedDepotHubIds() {
+        return List.copyOf(allowedDepotHubIds);
+    }
+
+    public boolean hasDepotHubRestrictions() {
+        return !allowedDepotHubIds.isEmpty();
+    }
+
+    public boolean allowsDepotHubId(String hubIdRaw) {
+        if (!hasDepotHubRestrictions()) {
+            return true;
+        }
+        String hubId = normalizeDepotHubId(hubIdRaw);
+        return !hubId.isBlank() && allowedDepotHubIds.contains(hubId);
     }
 
     public int getMinimumIntervalTicksRaw() {
@@ -110,6 +148,52 @@ public class LineSettings {
         this.routeReplanWaitTicks = value;
     }
 
+    public TrainServiceClass getServiceClassRaw() {
+        return serviceClass;
+    }
+
+    public void setServiceClass(TrainServiceClass value) {
+        this.serviceClass = value == null ? TrainServiceClass.RE : value;
+    }
+
+    public int getManualTrainCountRaw() {
+        return manualTrainCount;
+    }
+
+    public void setManualTrainCount(int value) {
+        this.manualTrainCount = Math.max(1, Math.min(64, value));
+    }
+
+    public void clearManualTrainCount() {
+        this.manualTrainCount = -1;
+    }
+
+    public boolean toggleAllowedDepotHubId(String hubIdRaw) {
+        String hubId = normalizeDepotHubId(hubIdRaw);
+        if (hubId.isBlank()) {
+            return false;
+        }
+        if (allowedDepotHubIds.contains(hubId)) {
+            allowedDepotHubIds.remove(hubId);
+            return true;
+        }
+        allowedDepotHubIds.add(hubId);
+        return true;
+    }
+
+    public void setAllowedDepotHubIds(List<String> hubIds) {
+        allowedDepotHubIds.clear();
+        if (hubIds == null) {
+            return;
+        }
+        for (String hubId : hubIds) {
+            String normalized = normalizeDepotHubId(hubId);
+            if (!normalized.isBlank() && !allowedDepotHubIds.contains(normalized)) {
+                allowedDepotHubIds.add(normalized);
+            }
+        }
+    }
+
     public CompoundTag write() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("MinimumIntervalTicks", minimumIntervalTicks);
@@ -120,6 +204,13 @@ public class LineSettings {
         tag.putDouble("ResyncAggressiveness", resynchronizationAggressiveness);
         tag.putInt("RouteSwitchCooldownTicks", routeSwitchCooldownTicks);
         tag.putInt("RouteReplanWaitTicks", routeReplanWaitTicks);
+        tag.putString("ServiceClass", resolveServiceClass().name());
+        tag.putInt("ManualTrainCount", manualTrainCount);
+        ListTag depotHubsTag = new ListTag();
+        for (String hubId : allowedDepotHubIds) {
+            depotHubsTag.add(StringTag.valueOf(hubId));
+        }
+        tag.put("AllowedDepotHubs", depotHubsTag);
         return tag;
     }
 
@@ -133,6 +224,26 @@ public class LineSettings {
         settings.resynchronizationAggressiveness = tag.getDouble("ResyncAggressiveness");
         settings.routeSwitchCooldownTicks = tag.getInt("RouteSwitchCooldownTicks");
         settings.routeReplanWaitTicks = tag.getInt("RouteReplanWaitTicks");
+        settings.serviceClass = TrainServiceClass.fromStringOrDefault(tag.getString("ServiceClass"), TrainServiceClass.RE);
+        settings.manualTrainCount = tag.getInt("ManualTrainCount");
+        List<String> allowedHubs = new ArrayList<>();
+        for (Tag hubTag : tag.getList("AllowedDepotHubs", Tag.TAG_STRING)) {
+            allowedHubs.add(hubTag.getAsString());
+        }
+        settings.setAllowedDepotHubIds(allowedHubs);
         return settings;
+    }
+
+    private String normalizeDepotHubId(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        String value = raw.trim().toLowerCase(Locale.ROOT);
+        if (value.startsWith("hubid:")) {
+            value = value.substring("hubid:".length()).trim();
+        } else if (value.startsWith("hub:")) {
+            value = value.substring("hub:".length()).trim();
+        }
+        return value;
     }
 }

@@ -85,7 +85,7 @@ public final class TrainSlothConfig {
             enableNumericStationFamilyFallback = builder.comment("Treat stations like 'Name', 'Name 2', 'Name 3' as alternatives of one station family.")
                 .define("enableNumericStationFamilyFallback", true);
             enableDepotControl = builder.comment("Enable router-controlled depot deploy/recall behavior.")
-                .define("enableDepotControl", false);
+                .define("enableDepotControl", true);
             depotHubIds = builder.comment("Hub ids treated as depots for reserve train deploy/recall.")
                 .defineListAllowEmpty(List.of("depotHubIds"), List::of, value -> value instanceof String);
             replanWaitTicks = builder.comment("Ticks waiting for signal before alternative route selection starts.")

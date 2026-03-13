@@ -136,6 +136,13 @@ public class TrainLine {
             line.settings().setResynchronizationAggressiveness(loadedSettings.getResynchronizationAggressivenessRaw());
             line.settings().setRouteSwitchCooldownTicks(loadedSettings.getRouteSwitchCooldownTicksRaw());
             line.settings().setRouteReplanWaitTicks(loadedSettings.getRouteReplanWaitTicksRaw());
+            line.settings().setServiceClass(loadedSettings.getServiceClassRaw());
+            if (loadedSettings.getManualTrainCountRaw() > 0) {
+                line.settings().setManualTrainCount(loadedSettings.getManualTrainCountRaw());
+            } else {
+                line.settings().clearManualTrainCount();
+            }
+            line.settings().setAllowedDepotHubIds(loadedSettings.allowedDepotHubIds());
         }
 
         return line;

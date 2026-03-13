@@ -15,6 +15,7 @@ import dev.elved.createtrainsloth.interlocking.schematic.SectionIdHelper;
 import dev.elved.createtrainsloth.line.LineId;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.ScheduleLineSyncService;
+import dev.elved.createtrainsloth.line.TrainLine;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -131,6 +132,12 @@ public class RoutingAuthorityService {
             if (train.runtime == null || train.runtime.paused) {
                 continue;
             }
+            if (isRecallInProgress(train.id)) {
+                continue;
+            }
+            if (lineManager.lineForTrain(train).isEmpty()) {
+                continue;
+            }
             if (train.navigation.destination != null) {
                 continue;
             }
@@ -157,6 +164,13 @@ public class RoutingAuthorityService {
         return started;
     }
 
+    public int triggerManualRouterPing(Level level, List<Train> trains) {
+        if (level == null || trains == null || trains.isEmpty() || depotRuntimeService == null) {
+            return 0;
+        }
+        return depotRuntimeService.triggerManualBalance(level, trains);
+    }
+
     private void runMissionHealthcheck(Level level, List<Train> trains) {
         if (level == null || trains == null || trains.isEmpty()) {
             return;
@@ -179,11 +193,25 @@ public class RoutingAuthorityService {
             if (train.runtime == null || train.runtime.paused) {
                 continue;
             }
+            if (isRecallInProgress(train.id)) {
+                if (debugOverlay != null) {
+                    debugOverlay.recordMission(train.id, "MISSION_HEALTHCHECK_SKIP reason=recall_in_progress");
+                }
+                continue;
+            }
+
+            Optional<TrainLine> assignedLine = lineManager.lineForTrain(train);
+            if (assignedLine.isEmpty()) {
+                if (debugOverlay != null) {
+                    debugOverlay.clearMission(train.id);
+                }
+                continue;
+            }
 
             boolean missionEmpty = trainMissionService == null || trainMissionService.peekMissionDestination(train.id).isEmpty();
             if (missionEmpty && debugOverlay != null) {
                 String current = train.getCurrentStation() == null ? "<unknown>" : train.getCurrentStation().name;
-                String lineId = lineManager.lineForTrain(train).map(line -> line.id().value()).orElse("<none>");
+                String lineId = assignedLine.map(line -> line.id().value()).orElse("<none>");
                 debugOverlay.recordMission(
                     train.id,
                     "MISSION_EMPTY_REPORT tick=" + gameTime
@@ -247,6 +275,18 @@ public class RoutingAuthorityService {
                 null,
                 request.lineId(),
                 TrainRoutingResponse.invalidRequest(request.correlationId(), "train_missing", "Train was null in schedule request")
+            );
+        }
+        if (isRecallInProgress(train.id)) {
+            return finalizeResponse(
+                train,
+                request.lineId(),
+                TrainRoutingResponse.noDestination(
+                    request.correlationId(),
+                    null,
+                    "recall_in_progress",
+                    "Train is currently being recalled to depot"
+                )
             );
         }
 
@@ -324,6 +364,18 @@ public class RoutingAuthorityService {
                 TrainRoutingResponse.invalidRequest(correlationId, "train_missing", "Train was null in router call")
             );
         }
+        if (isRecallInProgress(train.id)) {
+            return finalizeResponse(
+                train,
+                request.lineId(),
+                TrainRoutingResponse.noDestination(
+                    correlationId,
+                    null,
+                    "recall_in_progress",
+                    "Train is currently being recalled to depot"
+                )
+            );
+        }
 
         if (train.graph == null) {
             return finalizeResponse(
@@ -367,6 +419,10 @@ public class RoutingAuthorityService {
         LineId lineId = lineManager.lineForTrain(train).map(line -> line.id()).orElse(null);
         String currentLocation = train.getCurrentStation() == null ? null : train.getCurrentStation().name;
         return TrainRoutingRequest.create(correlationId, train.id, lineId, currentLocation, destinationFilter, requestSource);
+    }
+
+    public boolean isRecallInProgress(UUID trainId) {
+        return depotRuntimeService != null && depotRuntimeService.isRecallInProgress(trainId);
     }
 
     private RouteSelection selectBestPath(

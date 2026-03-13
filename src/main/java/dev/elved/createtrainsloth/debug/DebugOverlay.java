@@ -68,6 +68,10 @@ public class DebugOverlay {
         missionByTrain.put(trainId, detail);
     }
 
+    public void clearMission(UUID trainId) {
+        missionByTrain.remove(trainId);
+    }
+
     public String debugForTrain(UUID trainId) {
         String hold = holdReasonsByTrain.getOrDefault(trainId, "no dispatch record");
         String route = routeSwitchesByTrain.getOrDefault(trainId, "no routing record");

@@ -100,8 +100,13 @@ public class DispatchController {
                 }
 
                 if (!releasedThisTick && !runtimeState.hasPendingDispatch(gameTick)) {
-                    if (needsStellwerkDirectedDeparture(train) && !prepareDeparturePath(level, train, line)) {
-                        hold(train, lineId, "no stellwerk path");
+                    if (needsStellwerkDirectedDeparture(train)) {
+                        if (!prepareDeparturePath(level, train, line)) {
+                            hold(train, lineId, "no stellwerk path");
+                            continue;
+                        }
+                    } else if (!hasResolvableScheduleRoute(level, train)) {
+                        hold(train, lineId, "no schedule route");
                         continue;
                     }
                     runtimeState.setPendingDispatch(train.id, gameTick + DISPATCH_TOKEN_DURATION);
@@ -173,6 +178,10 @@ public class DispatchController {
 
     private boolean isDispatchCandidate(Train train, TrainLine line) {
         if (train.derailed || train.graph == null) {
+            return false;
+        }
+        if (CreateTrainSlothMod.runtime().routingAuthorityService() != null
+            && CreateTrainSlothMod.runtime().routingAuthorityService().isRecallInProgress(train.id)) {
             return false;
         }
 
@@ -356,6 +365,20 @@ public class DispatchController {
             }
         }
         return null;
+    }
+
+    private boolean hasResolvableScheduleRoute(Level level, Train train) {
+        if (train == null || train.graph == null) {
+            return false;
+        }
+        if (CreateTrainSlothMod.runtime().routingAuthorityService() == null) {
+            return false;
+        }
+
+        TrainRoutingResponse routerResponse = CreateTrainSlothMod.runtime()
+            .routingAuthorityService()
+            .requestRouteForCurrentSchedule(level, train);
+        return routerResponse != null && routerResponse.successful() && routerResponse.path() != null;
     }
 
     private record DispatchDecision(boolean hold, String reason) {

@@ -58,6 +58,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
     private Button unlockButton;
     private Button autoRoutingButton;
     private Button missionPingButton;
+    private Button routerPingButton;
 
     public StellwerkScreen(StellwerkMenu menu, Inventory inventory, Component title) {
         super(menu, inventory, title);
@@ -108,9 +109,18 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
             button -> sendMenuButton(StellwerkMenu.BUTTON_TRIGGER_MISSION_PING)
         ));
 
-        addRenderableWidget(new StellwerkStyledButton(
+        routerPingButton = addRenderableWidget(new StellwerkStyledButton(
             controlsX,
             controlsY + 64,
+            58,
+            14,
+            Component.translatable("create_train_sloth.stellwerk.button.router_ping"),
+            button -> sendMenuButton(StellwerkMenu.BUTTON_TRIGGER_ROUTER_PING)
+        ));
+
+        addRenderableWidget(new StellwerkStyledButton(
+            controlsX,
+            controlsY + 80,
             18,
             14,
             Component.literal("+"),
@@ -121,7 +131,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         ));
         addRenderableWidget(new StellwerkStyledButton(
             controlsX + 20,
-            controlsY + 64,
+            controlsY + 80,
             18,
             14,
             Component.literal("-"),
@@ -132,7 +142,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         ));
         addRenderableWidget(new StellwerkStyledButton(
             controlsX + 40,
-            controlsY + 64,
+            controlsY + 80,
             18,
             14,
             Component.translatable("create_train_sloth.stellwerk.button.center"),
@@ -332,6 +342,7 @@ public class StellwerkScreen extends AbstractContainerScreen<StellwerkMenu> {
         unlockButton.active = hasSelection && selected.locked();
 
         missionPingButton.active = menu.trackedTrainCount() > 0;
+        routerPingButton.active = menu.trackedTrainCount() > 0;
     }
 
     private Component autoRoutingText() {

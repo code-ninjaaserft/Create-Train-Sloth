@@ -165,7 +165,9 @@ public class AlternativePathSelector {
             boolean proactiveAssignedSwitch = TrainSlothConfig.ROUTING.enableProactivePlatformPlanning.get()
                 && plannedAssignment.isPresent()
                 && !plannedAssignment.get().stationId().equals(primaryDestination.id)
-                && train.navigation.distanceToDestination > 2D;
+                && train.navigation.distanceToDestination > 2D
+                && train.navigation.waitingForSignal != null
+                && train.navigation.ticksWaitingForSignal >= Math.max(10, adaptiveReplanThreshold / 2);
 
             if (!blocked && !proactiveAssignedSwitch) {
                 continue;

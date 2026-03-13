@@ -28,6 +28,7 @@ public record EditStellwerkRoutePayload(
     public static final byte ACTION_CREATE = 3;
     public static final byte ACTION_UPDATE_META = 4;
     public static final byte ACTION_DELETE_ROUTE = 5;
+    public static final byte ACTION_TOGGLE_DEPOT_HUB = 6;
 
     public static final Type<EditStellwerkRoutePayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(CreateTrainSlothMod.MOD_ID, "edit_stellwerk_route")
@@ -80,6 +81,10 @@ public record EditStellwerkRoutePayload(
         return new EditStellwerkRoutePayload(pos, lineId, "", "", "", -1, -1, ACTION_DELETE_ROUTE);
     }
 
+    public static EditStellwerkRoutePayload toggleDepotHub(BlockPos pos, String lineId, String hubId) {
+        return new EditStellwerkRoutePayload(pos, lineId, hubId, "", "", -1, -1, ACTION_TOGGLE_DEPOT_HUB);
+    }
+
     @Override
     public Type<? extends CustomPacketPayload> type() {
         return TYPE;
@@ -126,6 +131,10 @@ public record EditStellwerkRoutePayload(
             }
             if (payload.action == ACTION_DELETE_ROUTE) {
                 deleteRoute(blockEntity, payload.lineId);
+                return;
+            }
+            if (payload.action == ACTION_TOGGLE_DEPOT_HUB) {
+                toggleDepotHub(blockEntity, payload.lineId, payload.stationName);
             }
         });
     }
@@ -177,6 +186,12 @@ public record EditStellwerkRoutePayload(
         }
         if (blockEntity instanceof LineManagerComputerBlockEntity lineManagerComputerBlockEntity) {
             lineManagerComputerBlockEntity.deleteRoute(lineId);
+        }
+    }
+
+    private static void toggleDepotHub(Object blockEntity, String lineId, String hubId) {
+        if (blockEntity instanceof LineManagerComputerBlockEntity lineManagerComputerBlockEntity) {
+            lineManagerComputerBlockEntity.toggleLineDepotHub(lineId, hubId);
         }
     }
 }

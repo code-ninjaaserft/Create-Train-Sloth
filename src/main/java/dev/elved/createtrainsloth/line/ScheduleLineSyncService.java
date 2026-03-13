@@ -8,6 +8,7 @@ import com.simibubi.create.content.trains.schedule.condition.TimedWaitCondition;
 import com.simibubi.create.content.trains.schedule.destination.ChangeTitleInstruction;
 import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
 import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
+import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubId;
@@ -65,15 +66,26 @@ public class ScheduleLineSyncService {
                 changed |= line.addStationName(stationFilter);
             }
 
+            if (spec.serviceClass() != null && line.settings().resolveServiceClass() != spec.serviceClass()) {
+                line.settings().setServiceClass(spec.serviceClass());
+                changed = true;
+            }
+
             changed |= applySettings(line, spec.settings());
             if (changed) {
                 lineRegistry.markDirty();
             }
 
             Optional<TrainLineAssignment> currentAssignment = lineRegistry.assignmentOf(train.id);
+            boolean idleAtDepot = isIdleAtDepot(train);
+            if (idleAtDepot && currentAssignment.isEmpty()) {
+                managedAssignments.remove(train.id);
+                continue;
+            }
+
             boolean force = TrainSlothConfig.SCHEDULE.forceScheduleLineAssignment.get();
             boolean assignedByScheduleBefore = managedAssignments.containsKey(train.id);
-            boolean shouldAssign = force || assignedByScheduleBefore || currentAssignment.isEmpty();
+            boolean shouldAssign = !idleAtDepot && (force || assignedByScheduleBefore || currentAssignment.isEmpty());
 
             if (shouldAssign) {
                 TrainServiceClass serviceClass = spec.serviceClass();
@@ -86,6 +98,30 @@ public class ScheduleLineSyncService {
         }
 
         managedAssignments.keySet().removeIf(trainId -> !seenTrains.contains(trainId));
+    }
+
+    private boolean isIdleAtDepot(Train train) {
+        if (train == null || stationHubRegistry == null) {
+            return false;
+        }
+        if (train.runtime == null) {
+            return false;
+        }
+        if (train.navigation.destination != null) {
+            return false;
+        }
+
+        GlobalStation currentStation = train.getCurrentStation();
+        if (currentStation == null) {
+            return false;
+        }
+
+        for (StationHub hub : stationHubRegistry.allHubs()) {
+            if (hub.isDepotHub() && hub.matchesStation(currentStation)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Optional<DerivedLineSpec> deriveLineSpec(Train train) {

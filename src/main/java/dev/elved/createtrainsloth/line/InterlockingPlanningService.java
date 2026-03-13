@@ -86,10 +86,12 @@ public class InterlockingPlanningService {
             finalId = baseId + "_" + suffix++;
         }
 
+        TrainServiceClass parsedService = parseServiceClass(serviceClassRaw);
         TrainLine line = lineRegistry.createLine(new LineId(finalId), routeName);
         line.setDisplayName(routeName);
+        line.settings().setServiceClass(parsedService);
         routeStationsByLine.put(finalId, new ArrayList<>());
-        routeServiceByLine.put(finalId, parseServiceClass(serviceClassRaw));
+        routeServiceByLine.put(finalId, parsedService);
         lineRegistry.markDirty();
         return Optional.of(finalId);
     }
@@ -120,6 +122,10 @@ public class InterlockingPlanningService {
         TrainServiceClass parsedService = parseServiceClass(serviceClassRaw);
         if (routeServiceByLine.getOrDefault(lineId, TrainServiceClass.RE) != parsedService) {
             routeServiceByLine.put(lineId, parsedService);
+            changed = true;
+        }
+        if (line.settings().resolveServiceClass() != parsedService) {
+            line.settings().setServiceClass(parsedService);
             changed = true;
         }
 

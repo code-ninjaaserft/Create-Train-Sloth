@@ -31,12 +31,15 @@ import net.minecraft.world.level.Level;
 
 public class DepotRuntimeService {
 
+    private static final long LINE_BALANCE_INTERVAL_TICKS = 20L;
+
     private final LineRegistry lineRegistry;
     private final LineManager lineManager;
     private final LinePlanningService linePlanningService;
     private final StationHubRegistry stationHubRegistry;
     private final DebugOverlay debugOverlay;
     private final Set<UUID> recallInProgress = new HashSet<>();
+    private long lastLineBalanceTick = Long.MIN_VALUE;
 
     public DepotRuntimeService(
         LineRegistry lineRegistry,
@@ -53,16 +56,31 @@ public class DepotRuntimeService {
     }
 
     public void tick(Level level, List<Train> trains) {
+        runDepotControl(level, trains, false);
+    }
+
+    public int triggerManualBalance(Level level, List<Train> trains) {
         if (!TrainSlothConfig.ROUTING.enableDepotControl.get()) {
-            return;
+            return -1;
+        }
+        return runDepotControl(level, trains, true);
+    }
+
+    public boolean isRecallInProgress(UUID trainId) {
+        return trainId != null && recallInProgress.contains(trainId);
+    }
+
+    private int runDepotControl(Level level, List<Train> trains, boolean forceLineBalanceCheck) {
+        if (!TrainSlothConfig.ROUTING.enableDepotControl.get()) {
+            return 0;
         }
         if (level == null || trains == null || trains.isEmpty()) {
-            return;
+            return 0;
         }
 
         List<StationHub> depotHubs = resolveDepotHubs();
         if (depotHubs.isEmpty()) {
-            return;
+            return 0;
         }
 
         List<Train> ordered = new ArrayList<>(trains);
@@ -73,37 +91,80 @@ public class DepotRuntimeService {
         }
 
         processRecallArrivals(trainById, depotHubs);
-        List<Train> availableDepotTrains = collectAvailableDepotTrains(ordered, depotHubs);
-        evaluateLineBalances(level, ordered, availableDepotTrains, depotHubs);
-        routeUnassignedTrainsToDepot(ordered, depotHubs);
+        int actions = 0;
+        Set<UUID> reservedDepotStations = collectReservedDepotStationIds(ordered, depotHubs);
+        if (shouldRunLineBalanceCheck(level, forceLineBalanceCheck)) {
+            List<Train> availableDepotTrains = collectAvailableDepotTrains(ordered, depotHubs);
+            actions += evaluateLineBalances(level, ordered, availableDepotTrains, depotHubs, reservedDepotStations);
+            lastLineBalanceTick = level.getGameTime();
+        }
+        actions += routeUnassignedTrainsToDepot(ordered, depotHubs, reservedDepotStations);
+        return actions;
     }
 
-    private void evaluateLineBalances(
+    private boolean shouldRunLineBalanceCheck(Level level, boolean force) {
+        if (force) {
+            return true;
+        }
+        if (level == null) {
+            return false;
+        }
+        if (lastLineBalanceTick == Long.MIN_VALUE) {
+            return true;
+        }
+        return level.getGameTime() - lastLineBalanceTick >= LINE_BALANCE_INTERVAL_TICKS;
+    }
+
+    private int evaluateLineBalances(
         Level level,
         List<Train> trains,
         List<Train> availableDepotTrains,
-        List<StationHub> depotHubs
+        List<StationHub> depotHubs,
+        Set<UUID> reservedDepotStations
     ) {
+        int actions = 0;
         List<TrainLine> lines = new ArrayList<>(lineRegistry.allLines());
         lines.sort(Comparator.comparing(line -> line.id().value()));
 
         for (TrainLine line : lines) {
             LineId lineId = line.id();
+            List<StationHub> lineDepotHubs = resolveLineDepotHubs(line, depotHubs);
+            if (lineDepotHubs.isEmpty()) {
+                continue;
+            }
             int currentTrainCount = lineManager.countAssignedTrains(lineId);
-            TrainServiceClass serviceClass = dominantServiceClass(lineId);
+            TrainServiceClass serviceClass = resolveServiceClassForLine(line, lineId);
             int recommendedTrainCount = linePlanningService.recommendedTrainCount(line, line.stationCount(), serviceClass);
+            int targetTrainCount = line.settings().resolveTargetTrainCount(recommendedTrainCount);
 
-            while (currentTrainCount < recommendedTrainCount && !availableDepotTrains.isEmpty()) {
-                Train depotTrain = availableDepotTrains.remove(0);
+            while (currentTrainCount < targetTrainCount) {
+                Train depotTrain = takeFirstAvailableDepotTrain(availableDepotTrains, lineDepotHubs);
+                if (depotTrain == null) {
+                    break;
+                }
                 lineRegistry.assignTrain(depotTrain.id, lineId, serviceClass);
                 currentTrainCount++;
+                actions++;
                 recordDepotAction(
                     depotTrain,
-                    "DEPLOY line=" + lineId.value() + " svc=" + serviceClass.name() + " current=" + currentTrainCount + "/" + recommendedTrainCount
+                    "DEPLOY line=" + lineId.value()
+                        + " svc=" + serviceClass.name()
+                        + " current=" + currentTrainCount
+                        + "/" + targetTrainCount
+                        + " recommended=" + recommendedTrainCount
                 );
             }
 
-            int excess = currentTrainCount - recommendedTrainCount;
+            int excess = currentTrainCount - targetTrainCount;
+            if (excess <= 0) {
+                continue;
+            }
+
+            int alreadyAtDepot = unassignExcessTrainsAlreadyAtDepot(lineId, lineDepotHubs, trains, excess);
+            if (alreadyAtDepot > 0) {
+                excess -= alreadyAtDepot;
+                actions += alreadyAtDepot;
+            }
             if (excess <= 0) {
                 continue;
             }
@@ -117,22 +178,66 @@ public class DepotRuntimeService {
                     continue;
                 }
 
-                DiscoveredPath pathToDepot = findPathToDepot(candidate, depotHubs);
+                DiscoveredPath pathToDepot = findPathToDepot(candidate, lineDepotHubs, reservedDepotStations);
                 if (pathToDepot == null || pathToDepot.destination == null) {
+                    recordDepotAction(candidate, "RECALL_SKIPPED line=" + lineId.value() + " reason=no_path_to_depot");
                     continue;
                 }
                 if (candidate.navigation.startNavigation(pathToDepot) < 0D) {
+                    recordDepotAction(candidate, "RECALL_SKIPPED line=" + lineId.value() + " reason=start_navigation_failed");
                     continue;
                 }
 
                 recallInProgress.add(candidate.id);
                 excess--;
+                actions++;
                 recordDepotAction(
                     candidate,
                     "RECALL line=" + lineId.value() + " destination=" + pathToDepot.destination.name
                 );
             }
         }
+        return actions;
+    }
+
+    private int unassignExcessTrainsAlreadyAtDepot(
+        LineId lineId,
+        List<StationHub> lineDepotHubs,
+        List<Train> trains,
+        int maxToUnassign
+    ) {
+        if (lineId == null || lineDepotHubs == null || lineDepotHubs.isEmpty() || trains == null || trains.isEmpty() || maxToUnassign <= 0) {
+            return 0;
+        }
+
+        int unassigned = 0;
+        for (Train train : trains) {
+            if (unassigned >= maxToUnassign) {
+                break;
+            }
+            if (train == null || train.derailed || train.runtime == null || train.runtime.state != ScheduleRuntime.State.PRE_TRANSIT) {
+                continue;
+            }
+            if (train.navigation.destination != null || recallInProgress.contains(train.id)) {
+                continue;
+            }
+
+            Optional<LineId> assignedLine = lineRegistry.assignmentOf(train.id).map(assignment -> assignment.lineId());
+            if (assignedLine.isEmpty() || !assignedLine.get().equals(lineId)) {
+                continue;
+            }
+
+            GlobalStation currentStation = train.getCurrentStation();
+            if (currentStation == null || !matchesAnyHub(currentStation, lineDepotHubs)) {
+                continue;
+            }
+
+            lineRegistry.unassignTrain(train.id);
+            unassigned++;
+            recordDepotAction(train, "EXCESS_UNASSIGN_AT_DEPOT line=" + lineId.value() + " depot=" + currentStation.name);
+        }
+
+        return unassigned;
     }
 
     private void processRecallArrivals(Map<UUID, Train> trainById, List<StationHub> depotHubs) {
@@ -182,17 +287,35 @@ public class DepotRuntimeService {
         return available;
     }
 
+    private Train takeFirstAvailableDepotTrain(List<Train> availableDepotTrains, List<StationHub> allowedDepotHubs) {
+        if (availableDepotTrains == null || availableDepotTrains.isEmpty()) {
+            return null;
+        }
+        for (int i = 0; i < availableDepotTrains.size(); i++) {
+            Train train = availableDepotTrains.get(i);
+            if (train == null) {
+                continue;
+            }
+            if (!matchesAnyHub(train.getCurrentStation(), allowedDepotHubs)) {
+                continue;
+            }
+            availableDepotTrains.remove(i);
+            return train;
+        }
+        return null;
+    }
+
     private List<Train> collectRecallCandidatesForLine(LineId lineId, List<Train> trains) {
         List<Train> candidates = new ArrayList<>();
         for (Train train : trains) {
+            if (train == null || train.derailed || train.graph == null) {
+                continue;
+            }
             Optional<LineId> assignedLine = lineRegistry.assignmentOf(train.id).map(assignment -> assignment.lineId());
             if (assignedLine.isEmpty() || !assignedLine.get().equals(lineId)) {
                 continue;
             }
             if (train.runtime == null || train.runtime.state != ScheduleRuntime.State.PRE_TRANSIT) {
-                continue;
-            }
-            if (train.navigation.destination != null) {
                 continue;
             }
             if (train.getCurrentStation() == null) {
@@ -208,6 +331,10 @@ public class DepotRuntimeService {
     }
 
     private DiscoveredPath findPathToDepot(Train train, List<StationHub> depotHubs) {
+        return findPathToDepot(train, depotHubs, null);
+    }
+
+    private DiscoveredPath findPathToDepot(Train train, List<StationHub> depotHubs, Set<UUID> reservedDepotStations) {
         if (train == null || train.graph == null) {
             return null;
         }
@@ -219,6 +346,9 @@ public class DepotRuntimeService {
                 continue;
             }
             if (matchesAnyHub(station, depotHubs)) {
+                if (isDepotStationUnavailableFor(train, station, reservedDepotStations)) {
+                    continue;
+                }
                 candidates.add(station);
             }
         }
@@ -226,7 +356,11 @@ public class DepotRuntimeService {
         if (candidates.isEmpty()) {
             return null;
         }
-        return train.navigation.findPathTo(candidates, TrainSlothConfig.ROUTING.maxSearchCost.get());
+        DiscoveredPath path = train.navigation.findPathTo(candidates, TrainSlothConfig.ROUTING.maxSearchCost.get());
+        if (path != null && path.destination != null && reservedDepotStations != null) {
+            reservedDepotStations.add(path.destination.id);
+        }
+        return path;
     }
 
     private TrainServiceClass dominantServiceClass(LineId lineId) {
@@ -238,6 +372,32 @@ public class DepotRuntimeService {
             }
         }
         return selected;
+    }
+
+    private TrainServiceClass resolveServiceClassForLine(TrainLine line, LineId lineId) {
+        if (line == null) {
+            return dominantServiceClass(lineId);
+        }
+
+        return line.settings().resolveServiceClass();
+    }
+
+    private List<StationHub> resolveLineDepotHubs(TrainLine line, List<StationHub> depotHubs) {
+        if (line == null || depotHubs == null || depotHubs.isEmpty()) {
+            return List.of();
+        }
+        if (!line.settings().hasDepotHubRestrictions()) {
+            return depotHubs;
+        }
+
+        List<StationHub> allowed = new ArrayList<>();
+        for (StationHub hub : depotHubs) {
+            if (line.settings().allowsDepotHubId(hub.id().value())) {
+                allowed.add(hub);
+            }
+        }
+        // Fallback: keep balancing active even if saved restriction ids no longer resolve.
+        return allowed.isEmpty() ? depotHubs : allowed;
     }
 
     private List<StationHub> resolveDepotHubs() {
@@ -280,6 +440,41 @@ public class DepotRuntimeService {
         return false;
     }
 
+    private Set<UUID> collectReservedDepotStationIds(List<Train> trains, List<StationHub> depotHubs) {
+        if (trains == null || trains.isEmpty() || depotHubs == null || depotHubs.isEmpty()) {
+            return new HashSet<>();
+        }
+
+        Set<UUID> reserved = new HashSet<>();
+        for (Train train : trains) {
+            if (train == null) {
+                continue;
+            }
+            GlobalStation destination = train.navigation.destination;
+            if (destination != null && matchesAnyHub(destination, depotHubs)) {
+                reserved.add(destination.id);
+            }
+        }
+        return reserved;
+    }
+
+    private boolean isDepotStationUnavailableFor(Train self, GlobalStation station, Set<UUID> reservedDepotStations) {
+        if (station == null) {
+            return true;
+        }
+        if (reservedDepotStations != null && station.id != null && reservedDepotStations.contains(station.id)) {
+            return true;
+        }
+
+        Train present = station.getPresentTrain();
+        if (present != null && (self == null || !present.id.equals(self.id))) {
+            return true;
+        }
+
+        Train imminent = station.getImminentTrain();
+        return imminent != null && (self == null || !imminent.id.equals(self.id));
+    }
+
     private void recordDepotAction(Train train, String detail) {
         if (train == null) {
             return;
@@ -293,11 +488,12 @@ public class DepotRuntimeService {
         }
     }
 
-    private void routeUnassignedTrainsToDepot(List<Train> trains, List<StationHub> depotHubs) {
+    private int routeUnassignedTrainsToDepot(List<Train> trains, List<StationHub> depotHubs, Set<UUID> reservedDepotStations) {
         if (depotHubs == null || depotHubs.isEmpty()) {
-            return;
+            return 0;
         }
 
+        int routed = 0;
         for (Train train : trains) {
             if (train == null || train.graph == null) {
                 continue;
@@ -317,14 +513,16 @@ public class DepotRuntimeService {
                 continue;
             }
 
-            DiscoveredPath pathToDepot = findPathToDepot(train, depotHubs);
+            DiscoveredPath pathToDepot = findPathToDepot(train, depotHubs, reservedDepotStations);
             if (pathToDepot == null || pathToDepot.destination == null) {
                 continue;
             }
             if (train.navigation.startNavigation(pathToDepot) < 0D) {
                 continue;
             }
+            routed++;
             recordDepotAction(train, "UNASSIGNED_TO_DEPOT destination=" + pathToDepot.destination.name);
         }
+        return routed;
     }
 }

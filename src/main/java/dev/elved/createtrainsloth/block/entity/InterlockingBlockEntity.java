@@ -526,6 +526,29 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
         return true;
     }
 
+    public boolean triggerManualRouterPing() {
+        if (level == null || level.isClientSide()) {
+            return false;
+        }
+        if (CreateTrainSlothMod.runtime().routingAuthorityService() == null) {
+            return false;
+        }
+
+        List<Train> trains = List.copyOf(Create.RAILWAYS.trains.values());
+        if (trains.isEmpty()) {
+            return false;
+        }
+        int actions = CreateTrainSlothMod.runtime()
+            .routingAuthorityService()
+            .triggerManualRouterPing(level, trains);
+        if (actions < 0) {
+            return false;
+        }
+
+        setChangedAndSync();
+        return true;
+    }
+
     @Nullable
     private UUID selectedTrainId() {
         if (syncedTrainIds.isEmpty() || selectedTrainIndex < 0 || selectedTrainIndex >= syncedTrainIds.size()) {
@@ -877,14 +900,24 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
         }
 
         for (String lineId : lineIds) {
-            if (!routeServiceByLine.containsKey(lineId)) {
-                routeServiceByLine.put(lineId, TrainServiceClass.RE);
+            TrainLine line = lineRegistry.findLine(new LineId(lineId)).orElse(null);
+            TrainServiceClass serviceClass = line == null ? TrainServiceClass.RE : line.settings().resolveServiceClass();
+            TrainServiceClass cachedServiceClass = routeServiceByLine.get(lineId);
+            if (cachedServiceClass != null && serviceClass == TrainServiceClass.RE && cachedServiceClass != TrainServiceClass.RE) {
+                serviceClass = cachedServiceClass;
+            }
+            if (line != null && line.settings().resolveServiceClass() != serviceClass) {
+                line.settings().setServiceClass(serviceClass);
+                lineRegistry.markDirty();
+            }
+            if (routeServiceByLine.get(lineId) != serviceClass) {
+                routeServiceByLine.put(lineId, serviceClass);
                 changed = true;
             }
 
             if (!routeStationsByLine.containsKey(lineId)) {
                 List<String> stations = lineRegistry.findLine(new LineId(lineId))
-                    .map(line -> line.stationNames()
+                    .map(candidateLine -> candidateLine.stationNames()
                         .stream()
                         .sorted()
                         .toList())
