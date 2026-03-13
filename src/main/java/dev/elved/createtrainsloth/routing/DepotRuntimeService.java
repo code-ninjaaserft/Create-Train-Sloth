@@ -13,6 +13,7 @@ import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LinePlanningService;
 import dev.elved.createtrainsloth.line.LineRegistry;
 import dev.elved.createtrainsloth.line.TrainLine;
+import dev.elved.createtrainsloth.line.TrainLineAssignment;
 import dev.elved.createtrainsloth.line.TrainServiceClass;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubId;
@@ -197,7 +198,121 @@ public class DepotRuntimeService {
                 );
             }
         }
+        actions += rebalanceDeficitsWithDirectTransfers(lines, trains);
         return actions;
+    }
+
+    private int rebalanceDeficitsWithDirectTransfers(List<TrainLine> lines, List<Train> trains) {
+        if (lines == null || lines.isEmpty() || trains == null || trains.isEmpty()) {
+            return 0;
+        }
+
+        Map<LineId, Integer> currentCountByLine = new HashMap<>();
+        Map<LineId, Integer> targetCountByLine = new HashMap<>();
+        Map<LineId, TrainServiceClass> serviceClassByLine = new HashMap<>();
+        for (TrainLine line : lines) {
+            if (line == null) {
+                continue;
+            }
+            LineId lineId = line.id();
+            TrainServiceClass serviceClass = resolveServiceClassForLine(line, lineId);
+            int recommendedTrainCount = linePlanningService.recommendedTrainCount(line, line.stationCount(), serviceClass);
+            int targetTrainCount = line.settings().resolveTargetTrainCount(recommendedTrainCount);
+            currentCountByLine.put(lineId, lineManager.countAssignedTrains(lineId));
+            targetCountByLine.put(lineId, targetTrainCount);
+            serviceClassByLine.put(lineId, serviceClass);
+        }
+
+        int actions = 0;
+        boolean changed;
+        do {
+            changed = false;
+            for (TrainLine line : lines) {
+                if (line == null) {
+                    continue;
+                }
+                LineId deficitLineId = line.id();
+                int current = currentCountByLine.getOrDefault(deficitLineId, 0);
+                int target = targetCountByLine.getOrDefault(deficitLineId, 0);
+                if (current >= target) {
+                    continue;
+                }
+
+                while (current < target) {
+                    TransferCandidate transfer = selectTransferCandidate(trains, currentCountByLine, targetCountByLine, deficitLineId);
+                    if (transfer == null || transfer.train() == null || transfer.sourceLineId() == null) {
+                        break;
+                    }
+
+                    TrainServiceClass targetServiceClass = serviceClassByLine.getOrDefault(deficitLineId, TrainServiceClass.RE);
+                    lineRegistry.assignTrain(transfer.train().id, deficitLineId, targetServiceClass);
+                    currentCountByLine.put(transfer.sourceLineId(), Math.max(0, currentCountByLine.getOrDefault(transfer.sourceLineId(), 0) - 1));
+                    current++;
+                    currentCountByLine.put(deficitLineId, current);
+                    actions++;
+                    changed = true;
+                    recordDepotAction(
+                        transfer.train(),
+                        "DIRECT_TRANSFER from=" + transfer.sourceLineId().value()
+                            + " to=" + deficitLineId.value()
+                            + " current=" + current + "/" + target
+                    );
+                }
+            }
+        } while (changed);
+
+        return actions;
+    }
+
+    private TransferCandidate selectTransferCandidate(
+        List<Train> trains,
+        Map<LineId, Integer> currentCountByLine,
+        Map<LineId, Integer> targetCountByLine,
+        LineId deficitLineId
+    ) {
+        if (trains == null || trains.isEmpty() || currentCountByLine == null || targetCountByLine == null || deficitLineId == null) {
+            return null;
+        }
+
+        TransferCandidate selected = null;
+        int bestSurplus = Integer.MIN_VALUE;
+        for (Train train : trains) {
+            if (train == null || train.derailed || train.graph == null) {
+                continue;
+            }
+            if (train.runtime == null || train.runtime.state != ScheduleRuntime.State.PRE_TRANSIT) {
+                continue;
+            }
+            if (train.navigation.destination != null || train.getCurrentStation() == null) {
+                continue;
+            }
+            if (recallInProgress.contains(train.id)) {
+                continue;
+            }
+
+            Optional<TrainLineAssignment> assignment = lineRegistry.assignmentOf(train.id);
+            if (assignment.isEmpty()) {
+                continue;
+            }
+            LineId sourceLineId = assignment.get().lineId();
+            if (sourceLineId.equals(deficitLineId)) {
+                continue;
+            }
+
+            int sourceCurrent = currentCountByLine.getOrDefault(sourceLineId, 0);
+            int sourceTarget = targetCountByLine.getOrDefault(sourceLineId, sourceCurrent);
+            int surplus = sourceCurrent - sourceTarget;
+            if (surplus <= 0) {
+                continue;
+            }
+
+            if (surplus > bestSurplus || (surplus == bestSurplus && (selected == null || train.id.toString().compareTo(selected.train().id.toString()) < 0))) {
+                bestSurplus = surplus;
+                selected = new TransferCandidate(train, sourceLineId);
+            }
+        }
+
+        return selected;
     }
 
     private int unassignExcessTrainsAlreadyAtDepot(
@@ -486,6 +601,9 @@ public class DepotRuntimeService {
         if (TrainSlothConfig.DEBUG.verboseLogs.get()) {
             CreateTrainSlothMod.LOGGER.info("[CreateTrainSloth][Depot] train={} {}", train.id, detail);
         }
+    }
+
+    private record TransferCandidate(Train train, LineId sourceLineId) {
     }
 
     private int routeUnassignedTrainsToDepot(List<Train> trains, List<StationHub> depotHubs, Set<UUID> reservedDepotStations) {

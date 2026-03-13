@@ -82,6 +82,15 @@ public class TrainMissionService {
         }
 
         MissionState state = missionByTrain.computeIfAbsent(train.id, ignored -> new MissionState());
+        String assignedLineId = line.get().id().value();
+        if (state.assignedLineId == null || !state.assignedLineId.equals(assignedLineId)) {
+            state.destinations.clear();
+            state.nextIndex = 0;
+            state.assignedLineId = assignedLineId;
+            if (debugOverlay != null) {
+                debugOverlay.recordMission(train.id, "MISSION_LINE_SWITCH line=" + assignedLineId + " queue_reset");
+            }
+        }
         if (!state.destinations.isEmpty()) {
             return;
         }
@@ -309,5 +318,6 @@ public class TrainMissionService {
     private static class MissionState {
         private final Deque<String> destinations = new ArrayDeque<>();
         private int nextIndex = 0;
+        private String assignedLineId;
     }
 }

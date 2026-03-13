@@ -23,6 +23,7 @@ public class ReservationAwarenessService {
     private static final int UNKNOWN_STATION_RELEASE_FALLBACK_TICKS = 20 * 30;
     private static final int UNKNOWN_CONDITION_WAIT_FALLBACK_TICKS = 20 * 15;
     private static final int DERAIL_STATION_RELEASE_TICKS = 20 * 120;
+    private static final int APPROACH_CLAIM_MAX_ETA_TICKS = 20 * 60 * 6;
 
     public boolean isPrimaryPathBlocked(Train train, DiscoveredPath path) {
         if (path == null) {
@@ -77,7 +78,48 @@ public class ReservationAwarenessService {
             return Math.max(1, eta + dwell);
         }
 
+        int approachingClaim = estimateApproachingClaimTicks(requester, station);
+        if (approachingClaim > 0) {
+            return approachingClaim;
+        }
+
         return 0;
+    }
+
+    private int estimateApproachingClaimTicks(Train requester, GlobalStation station) {
+        if (station == null || station.id == null || Create.RAILWAYS == null || Create.RAILWAYS.trains == null) {
+            return 0;
+        }
+
+        int bestReleaseTicks = Integer.MAX_VALUE;
+        for (Train candidate : Create.RAILWAYS.trains.values()) {
+            if (candidate == null) {
+                continue;
+            }
+            if (requester != null && requester.id.equals(candidate.id)) {
+                continue;
+            }
+            if (candidate.derailed || candidate.runtime == null || candidate.runtime.paused) {
+                continue;
+            }
+
+            GlobalStation destination = candidate.navigation.destination;
+            if (destination == null || destination.id == null || !destination.id.equals(station.id)) {
+                continue;
+            }
+
+            int eta = estimateArrivalTicksToStation(candidate, station);
+            if (eta <= 0 || eta > APPROACH_CLAIM_MAX_ETA_TICKS) {
+                continue;
+            }
+
+            int release = eta + estimateMinimumStationOccupancyTicks();
+            if (release < bestReleaseTicks) {
+                bestReleaseTicks = release;
+            }
+        }
+
+        return bestReleaseTicks == Integer.MAX_VALUE ? 0 : Math.max(1, bestReleaseTicks);
     }
 
     private int estimateTicksUntilTrainClearsStation(Train occupyingTrain, GlobalStation station) {

@@ -295,11 +295,13 @@ public class RoutingAuthorityService {
             request.lineId(),
             request.correlationId(),
             STAGE_ROUTER_CALLED,
-            "source=" + request.requestSource() + " destination=<resolved_from_schedule>"
+            "source=" + request.requestSource()
+                + " line=" + (request.lineId() == null ? "<none>" : request.lineId().value())
+                + " destination=<resolved_from_schedule>"
         );
 
-        Optional<ScheduleDestinationResolver.DestinationContext> destinationContext = scheduleDestinationResolver.resolve(train);
-        if (destinationContext.isEmpty()) {
+        Optional<TrainLine> assignedLine = lineManager.lineForTrain(train);
+        if (assignedLine.isPresent()) {
             Optional<ScheduleDestinationResolver.DestinationContext> missionContext = resolveMissionDestination(train);
             if (missionContext.isPresent()) {
                 TrainRoutingRequest missionRequest = TrainRoutingRequest.create(
@@ -312,6 +314,22 @@ public class RoutingAuthorityService {
                 );
                 return routeToContext(level, train, missionRequest, missionContext.get());
             }
+
+            LineId assignedLineId = assignedLine.get().id();
+            return finalizeResponse(
+                train,
+                assignedLineId,
+                TrainRoutingResponse.noDestination(
+                    request.correlationId(),
+                    null,
+                    "line_mission_missing",
+                    "Train is assigned to line '" + assignedLineId.value() + "' but has no active mission destination"
+                )
+            );
+        }
+
+        Optional<ScheduleDestinationResolver.DestinationContext> destinationContext = scheduleDestinationResolver.resolve(train);
+        if (destinationContext.isEmpty()) {
             return finalizeResponse(
                 train,
                 request.lineId(),
@@ -385,30 +403,56 @@ public class RoutingAuthorityService {
             );
         }
 
-        if (request.requestedDestination() == null || request.requestedDestination().isBlank()) {
-            return finalizeResponse(
-                train,
-                request.lineId(),
-                TrainRoutingResponse.invalidRequest(correlationId, "destination_missing", "Requested destination filter is blank")
-            );
-        }
-
-        Optional<ScheduleDestinationResolver.DestinationContext> destinationContext =
-            scheduleDestinationResolver.resolveForFilter(train, request.requestedDestination());
-        if (destinationContext.isEmpty()) {
+        Optional<TrainLine> assignedLine = lineManager.lineForTrain(train);
+        if (assignedLine.isEmpty()) {
             return finalizeResponse(
                 train,
                 request.lineId(),
                 TrainRoutingResponse.noDestination(
                     correlationId,
                     null,
+                    "train_unassigned",
+                    "Train has no assigned line and is not eligible for router destination requests"
+                )
+            );
+        }
+        LineId assignedLineId = assignedLine.get().id();
+        TrainRoutingRequest effectiveRequest = request;
+        if (!assignedLineId.equals(request.lineId())) {
+            effectiveRequest = TrainRoutingRequest.create(
+                request.correlationId(),
+                request.trainId(),
+                assignedLineId,
+                request.currentLocation(),
+                request.requestedDestination(),
+                request.requestSource()
+            );
+        }
+
+        if (effectiveRequest.requestedDestination() == null || effectiveRequest.requestedDestination().isBlank()) {
+            return finalizeResponse(
+                train,
+                effectiveRequest.lineId(),
+                TrainRoutingResponse.invalidRequest(correlationId, "destination_missing", "Requested destination filter is blank")
+            );
+        }
+
+        Optional<ScheduleDestinationResolver.DestinationContext> destinationContext =
+            scheduleDestinationResolver.resolveForFilter(train, effectiveRequest.requestedDestination());
+        if (destinationContext.isEmpty()) {
+            return finalizeResponse(
+                train,
+                effectiveRequest.lineId(),
+                TrainRoutingResponse.noDestination(
+                    correlationId,
+                    null,
                     "no_destination_match",
-                    "No candidate station matched filter '" + request.requestedDestination() + "'"
+                    "No candidate station matched filter '" + effectiveRequest.requestedDestination() + "'"
                 )
             );
         }
 
-        return routeToContext(level, train, request, destinationContext.get());
+        return routeToContext(level, train, effectiveRequest, destinationContext.get());
     }
 
     private TrainRoutingRequest buildRequestFromTrain(Train train, String destinationFilter, String requestSource) {
@@ -443,6 +487,24 @@ public class RoutingAuthorityService {
         candidates.sort(Comparator.comparing(station -> station.id.toString()));
         boolean hasAlternativeToCurrent = currentStationId != null
             && candidates.stream().anyMatch(candidate -> !candidate.id.equals(currentStationId));
+        boolean hasClearCandidate = false;
+        for (GlobalStation station : candidates) {
+            if (currentStationId != null && hasAlternativeToCurrent && station.id.equals(currentStationId)) {
+                continue;
+            }
+            if (request.currentLocation() != null
+                && station.name != null
+                && hasAlternativeToCurrent
+                && station.name.equalsIgnoreCase(request.currentLocation())) {
+                continue;
+            }
+            boolean occupied = isStationOccupiedByOtherTrain(train, station);
+            int releaseTicks = reservationAwarenessService.estimateStationReleaseTicks(train, station);
+            if (!occupied && releaseTicks <= 0) {
+                hasClearCandidate = true;
+                break;
+            }
+        }
         Map<String, String> nodeAliasToToken = buildNodeAliasToTokenMap(train);
 
         RouteSelection best = null;
@@ -470,7 +532,8 @@ public class RoutingAuthorityService {
                 request.lineId(),
                 plannedStationId,
                 destinationContext.requiredNodes(),
-                nodeAliasToToken
+                nodeAliasToToken,
+                hasClearCandidate
             );
             if (best == null || score < best.score()) {
                 best = new RouteSelection(path, score);
@@ -503,7 +566,8 @@ public class RoutingAuthorityService {
         @Nullable LineId lineId,
         @Nullable UUID plannedStationId,
         List<String> requiredNodes,
-        Map<String, String> nodeAliasToToken
+        Map<String, String> nodeAliasToToken,
+        boolean hasClearCandidate
     ) {
         int score = (int) Math.round(path.cost + Math.abs(path.distance));
         PlatformTiming platformTiming = evaluatePlatformTiming(train, station, path);
@@ -517,6 +581,12 @@ public class RoutingAuthorityService {
 
         boolean occupiedByOtherTrain = isStationOccupiedByOtherTrain(train, station);
         if (occupiedByOtherTrain) {
+            score += 1_200;
+            if (hasClearCandidate) {
+                score += 6_000;
+            }
+        } else if (hasClearCandidate && stationReleaseTicks > 0) {
+            // Even if a platform clears in time, prefer currently clear alternatives.
             score += 1_200;
         }
 

@@ -83,8 +83,20 @@ public class ScheduleLineSyncService {
                 continue;
             }
 
+            LineId managedLine = managedAssignments.get(train.id);
+            if (managedLine != null
+                && currentAssignment.isPresent()
+                && !currentAssignment.get().lineId().equals(managedLine)) {
+                managedAssignments.remove(train.id);
+                managedLine = null;
+            }
+
+            if (currentAssignment.isPresent() && !currentAssignment.get().lineId().equals(spec.lineId())) {
+                continue;
+            }
+
             boolean force = TrainSlothConfig.SCHEDULE.forceScheduleLineAssignment.get();
-            boolean assignedByScheduleBefore = managedAssignments.containsKey(train.id);
+            boolean assignedByScheduleBefore = managedLine != null;
             boolean shouldAssign = !idleAtDepot && (force || assignedByScheduleBefore || currentAssignment.isEmpty());
 
             if (shouldAssign) {

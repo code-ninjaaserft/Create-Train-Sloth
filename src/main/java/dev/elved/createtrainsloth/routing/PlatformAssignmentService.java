@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
@@ -27,6 +28,7 @@ public class PlatformAssignmentService {
     private final ReservationAwarenessService reservationAwarenessService;
     private final Map<UUID, PlannedPlatformAssignment> assignmentByTrain = new HashMap<>();
     private final Map<UUID, List<PlannedPlatformAssignment>> assignmentsByStation = new HashMap<>();
+    private final Map<UUID, Set<UUID>> liveClaimsByStation = new HashMap<>();
 
     public PlatformAssignmentService(
         LineManager lineManager,
@@ -42,11 +44,13 @@ public class PlatformAssignmentService {
     public void plan(Level level, List<Train> trains) {
         assignmentByTrain.clear();
         assignmentsByStation.clear();
+        liveClaimsByStation.clear();
         if (!TrainSlothConfig.ROUTING.enableProactivePlatformPlanning.get()) {
             return;
         }
 
         long now = level.getGameTime();
+        indexLiveClaims(trains);
         List<PlatformRequest> requests = collectRequests(trains, now);
         requests.sort(
             Comparator.comparingLong(PlatformRequest::arrivalTick)
@@ -129,9 +133,16 @@ public class PlatformAssignmentService {
 
     private StationChoice chooseStation(PlatformRequest request) {
         StationChoice best = null;
+        boolean hasNonOverlappingCandidate = false;
+        for (GlobalStation station : request.destinationContext().candidateStations()) {
+            if (!hasPlannedOverlap(request, station) && !hasLiveClaimByOtherTrain(request, station)) {
+                hasNonOverlappingCandidate = true;
+                break;
+            }
+        }
 
         for (GlobalStation station : request.destinationContext().candidateStations()) {
-            int score = scoreStation(request, station);
+            int score = scoreStation(request, station, hasNonOverlappingCandidate);
             boolean primary = request.destinationContext().primaryDestination().id.equals(station.id);
 
             if (best == null || score < best.score() || (score == best.score() && primary && !best.primary())) {
@@ -142,9 +153,11 @@ public class PlatformAssignmentService {
         return best;
     }
 
-    private int scoreStation(PlatformRequest request, GlobalStation station) {
+    private int scoreStation(PlatformRequest request, GlobalStation station, boolean hasNonOverlappingCandidate) {
         int score = 0;
         boolean primary = request.destinationContext().primaryDestination().id.equals(station.id);
+        boolean hasOverlap = false;
+        boolean liveClaimed = hasLiveClaimByOtherTrain(request, station);
 
         if (primary) {
             score -= 350;
@@ -171,6 +184,7 @@ public class PlatformAssignmentService {
                 if (overlap <= 0) {
                     continue;
                 }
+                hasOverlap = true;
 
                 int overlapPenalty = (int) Math.min(4000, overlap * 3);
                 int priorityDelta = existing.serviceClass().priorityWeight() - request.serviceClass().priorityWeight();
@@ -184,7 +198,77 @@ public class PlatformAssignmentService {
             }
         }
 
+        if (hasNonOverlappingCandidate && hasOverlap) {
+            // Strongly prefer free platforms inside the same candidate group.
+            score += 8_000;
+        }
+        if (hasNonOverlappingCandidate && liveClaimed) {
+            // Prevent two trains from converging to one platform while alternatives are actually free.
+            score += 12_000;
+        }
+
         return score;
+    }
+
+    private boolean hasPlannedOverlap(PlatformRequest request, GlobalStation station) {
+        if (request == null || station == null) {
+            return false;
+        }
+        List<PlannedPlatformAssignment> stationAssignments = assignmentsByStation.get(station.id);
+        if (stationAssignments == null || stationAssignments.isEmpty()) {
+            return false;
+        }
+        for (PlannedPlatformAssignment existing : stationAssignments) {
+            if (overlapTicks(
+                request.arrivalTick(),
+                request.releaseTick(),
+                existing.arrivalTick(),
+                existing.releaseTick()
+            ) > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void indexLiveClaims(List<Train> trains) {
+        if (trains == null || trains.isEmpty()) {
+            return;
+        }
+        for (Train train : trains) {
+            if (train == null || train.id == null) {
+                continue;
+            }
+            GlobalStation currentStation = train.getCurrentStation();
+            if (currentStation != null && currentStation.id != null) {
+                registerLiveClaim(currentStation.id, train.id);
+            }
+            GlobalStation destinationStation = train.navigation.destination;
+            if (destinationStation != null && destinationStation.id != null) {
+                registerLiveClaim(destinationStation.id, train.id);
+            }
+        }
+    }
+
+    private void registerLiveClaim(UUID stationId, UUID trainId) {
+        liveClaimsByStation.computeIfAbsent(stationId, ignored -> new java.util.HashSet<>()).add(trainId);
+    }
+
+    private boolean hasLiveClaimByOtherTrain(PlatformRequest request, GlobalStation station) {
+        if (request == null || station == null || station.id == null) {
+            return false;
+        }
+        Set<UUID> claims = liveClaimsByStation.get(station.id);
+        if (claims == null || claims.isEmpty()) {
+            return false;
+        }
+        UUID requesterId = request.train() == null ? null : request.train().id;
+        for (UUID claimant : claims) {
+            if (requesterId == null || !requesterId.equals(claimant)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private long overlapTicks(long aStart, long aEnd, long bStart, long bEnd) {

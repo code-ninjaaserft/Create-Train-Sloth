@@ -24,6 +24,16 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+if (System.getProperty('os.name').toLowerCase().contains('win')) {
+    def externalBuildRoot = System.getenv('CTS_BUILD_DIR')
+    if (externalBuildRoot == null || externalBuildRoot.isBlank()) {
+        externalBuildRoot = System.getenv('LOCALAPPDATA')
+    }
+    if (externalBuildRoot != null && !externalBuildRoot.isBlank()) {
+        layout.buildDirectory.set(file("${externalBuildRoot}/Create-Train-Sloth/build"))
+    }
+}
+
 runs {
     configureEach {
         systemProperty 'forge.logging.markers', 'REGISTRIES'
@@ -96,6 +106,19 @@ tasks.withType(ProcessResources).configureEach {
     }
 }
 
+def isWindowsHost = System.getProperty('os.name').toLowerCase().contains('win')
+def clearWindowsReadOnlyAttrs = { File dir ->
+    if (!isWindowsHost || dir == null || !dir.exists()) {
+        return
+    }
+
+    String command = "attrib -R /S /D \"${dir}\\*\""
+    def process = new ProcessBuilder('cmd', '/c', command)
+        .redirectErrorStream(true)
+        .start()
+    process.waitFor()
+}
+
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
@@ -111,6 +134,15 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
+    doFirst {
+        clearWindowsReadOnlyAttrs(destinationDirectory.get().asFile)
+    }
+}
+
+tasks.matching { task -> task.name == 'neoFormRecompile' }.configureEach {
+    doFirst {
+        clearWindowsReadOnlyAttrs(layout.buildDirectory.get().asFile)
+    }
 }
 
 idea {
