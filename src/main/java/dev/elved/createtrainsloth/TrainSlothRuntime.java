@@ -20,6 +20,7 @@ import dev.elved.createtrainsloth.routing.RoutingAuthorityService;
 import dev.elved.createtrainsloth.routing.RoutePreferenceResolver;
 import dev.elved.createtrainsloth.routing.ScheduleAlternativeResolver;
 import dev.elved.createtrainsloth.routing.TrainMissionService;
+import dev.elved.createtrainsloth.planning.PlanningService;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
 import net.minecraft.server.MinecraftServer;
 
@@ -30,6 +31,7 @@ public class TrainSlothRuntime {
     private LineRegistry lineRegistry;
     private StationHubRegistry stationHubRegistry;
     private LineManager lineManager;
+    private PlanningService planningService;
     private LinePlanningService linePlanningService;
     private ScheduleLineSyncService scheduleLineSyncService;
     private StationStateTracker stationStateTracker;
@@ -58,8 +60,10 @@ public class TrainSlothRuntime {
         lineRegistry = new LineRegistry(savedData);
         stationHubRegistry = new StationHubRegistry(savedData);
         lineManager = new LineManager(lineRegistry, stationHubRegistry);
+        planningService = new PlanningService(lineRegistry, stationHubRegistry);
         linePlanningService = new LinePlanningService();
-        scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry, stationHubRegistry);
+        stellwerkControlModeService = new StellwerkControlModeService();
+        scheduleLineSyncService = new ScheduleLineSyncService(lineRegistry, stationHubRegistry, stellwerkControlModeService);
         stationStateTracker = new StationStateTracker();
         headwayCalculator = new HeadwayCalculator();
         debugOverlay = new DebugOverlay();
@@ -76,11 +80,10 @@ public class TrainSlothRuntime {
             lineManager,
             stationStateTracker,
             headwayCalculator,
-            platformAssignmentService,
-            debugOverlay
+            debugOverlay,
+            stellwerkControlModeService
         );
         interlockingControlService = new InterlockingControlService();
-        stellwerkControlModeService = new StellwerkControlModeService();
         alternativePathSelector = new AlternativePathSelector(
             lineManager,
             routePreferenceResolver,
@@ -95,9 +98,10 @@ public class TrainSlothRuntime {
         depotRuntimeService = new DepotRuntimeService(
             lineRegistry,
             lineManager,
-            linePlanningService,
+            planningService,
             stationHubRegistry,
-            debugOverlay
+            debugOverlay,
+            stellwerkControlModeService
         );
         trainMissionService = new TrainMissionService(stationHubRegistry);
         routingAuthorityService = new RoutingAuthorityService(
@@ -110,6 +114,7 @@ public class TrainSlothRuntime {
             scheduleAlternativeResolver,
             stationHubRegistry,
             interlockingControlService,
+            stellwerkControlModeService,
             depotRuntimeService,
             trainMissionService,
             debugOverlay
@@ -123,6 +128,7 @@ public class TrainSlothRuntime {
         lineRegistry = null;
         stationHubRegistry = null;
         lineManager = null;
+        planningService = null;
         linePlanningService = null;
         scheduleLineSyncService = null;
         stationStateTracker = null;
@@ -196,6 +202,10 @@ public class TrainSlothRuntime {
 
     public LineManager lineManager() {
         return lineManager;
+    }
+
+    public PlanningService planningService() {
+        return planningService;
     }
 
     public LinePlanningService linePlanningService() {

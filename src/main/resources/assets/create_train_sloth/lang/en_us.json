@@ -96,6 +96,8 @@
   "create_train_sloth.line_manager.button.manual_mode_off": "Auto",
   "create_train_sloth.line_manager.button.depot_toggle": "Depot",
   "create_train_sloth.line_manager.target_count": "Target: %s",
+  "create_train_sloth.line_manager.target_interval": "Interval: %ss",
+  "create_train_sloth.line_manager.target_interval_none": "Interval: -",
   "create_train_sloth.line_manager.depots_any": "Depots: any",
   "create_train_sloth.line_manager.depots_limited": "Depots: %s"
 }

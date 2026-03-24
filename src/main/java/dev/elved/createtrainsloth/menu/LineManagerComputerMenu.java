@@ -21,6 +21,8 @@ public class LineManagerComputerMenu extends AbstractContainerMenu {
     public static final int BUTTON_TOGGLE_MANUAL_TRAIN_COUNT = 3;
     public static final int BUTTON_MANUAL_TRAIN_COUNT_DEC = 4;
     public static final int BUTTON_MANUAL_TRAIN_COUNT_INC = 5;
+    public static final int BUTTON_MINIMUM_DWELL_DEC = 6;
+    public static final int BUTTON_MINIMUM_DWELL_INC = 7;
 
     private final BlockPos blockPos;
     private final Level level;
@@ -121,6 +123,12 @@ public class LineManagerComputerMenu extends AbstractContainerMenu {
         if (id == BUTTON_MANUAL_TRAIN_COUNT_INC) {
             return blockEntity.adjustSelectedLineManualTrainCount(1);
         }
+        if (id == BUTTON_MINIMUM_DWELL_DEC) {
+            return blockEntity.adjustSelectedLineMinimumDwellTicks(-1);
+        }
+        if (id == BUTTON_MINIMUM_DWELL_INC) {
+            return blockEntity.adjustSelectedLineMinimumDwellTicks(1);
+        }
         return false;
     }
 
@@ -188,6 +196,20 @@ public class LineManagerComputerMenu extends AbstractContainerMenu {
 
     public boolean selectedLineUsesManualTrainCount() {
         return blockEntity != null && blockEntity.selectedLineUsesManualTrainCount();
+    }
+
+    public int selectedLineMinimumDwellTicks() {
+        if (blockEntity == null) {
+            return 0;
+        }
+        return blockEntity.selectedLineMinimumDwellTicks();
+    }
+
+    public int selectedLineTargetIntervalTicks() {
+        if (blockEntity == null) {
+            return 0;
+        }
+        return blockEntity.selectedLineTargetIntervalTicks();
     }
 
     public List<String> selectedAllowedDepotHubs() {

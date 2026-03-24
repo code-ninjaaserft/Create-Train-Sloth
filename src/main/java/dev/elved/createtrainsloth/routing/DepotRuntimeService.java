@@ -1,20 +1,20 @@
 package dev.elved.createtrainsloth.routing;
 
 import com.simibubi.create.content.trains.entity.Train;
-import com.simibubi.create.content.trains.graph.DiscoveredPath;
 import com.simibubi.create.content.trains.graph.EdgePointType;
 import com.simibubi.create.content.trains.schedule.ScheduleRuntime;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
 import dev.elved.createtrainsloth.debug.DebugOverlay;
+import dev.elved.createtrainsloth.interlocking.StellwerkControlModeService;
 import dev.elved.createtrainsloth.line.LineId;
 import dev.elved.createtrainsloth.line.LineManager;
-import dev.elved.createtrainsloth.line.LinePlanningService;
 import dev.elved.createtrainsloth.line.LineRegistry;
 import dev.elved.createtrainsloth.line.TrainLine;
 import dev.elved.createtrainsloth.line.TrainLineAssignment;
 import dev.elved.createtrainsloth.line.TrainServiceClass;
+import dev.elved.createtrainsloth.planning.PlanningService;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubId;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.jetbrains.annotations.Nullable;
 import net.minecraft.world.level.Level;
 
 public class DepotRuntimeService {
@@ -36,24 +37,27 @@ public class DepotRuntimeService {
 
     private final LineRegistry lineRegistry;
     private final LineManager lineManager;
-    private final LinePlanningService linePlanningService;
+    private final PlanningService planningService;
     private final StationHubRegistry stationHubRegistry;
     private final DebugOverlay debugOverlay;
+    private final StellwerkControlModeService stellwerkControlModeService;
     private final Set<UUID> recallInProgress = new HashSet<>();
     private long lastLineBalanceTick = Long.MIN_VALUE;
 
     public DepotRuntimeService(
         LineRegistry lineRegistry,
         LineManager lineManager,
-        LinePlanningService linePlanningService,
+        PlanningService planningService,
         StationHubRegistry stationHubRegistry,
-        DebugOverlay debugOverlay
+        DebugOverlay debugOverlay,
+        StellwerkControlModeService stellwerkControlModeService
     ) {
         this.lineRegistry = lineRegistry;
         this.lineManager = lineManager;
-        this.linePlanningService = linePlanningService;
+        this.planningService = planningService;
         this.stationHubRegistry = stationHubRegistry;
         this.debugOverlay = debugOverlay;
+        this.stellwerkControlModeService = stellwerkControlModeService;
     }
 
     public void tick(Level level, List<Train> trains) {
@@ -99,7 +103,7 @@ public class DepotRuntimeService {
             actions += evaluateLineBalances(level, ordered, availableDepotTrains, depotHubs, reservedDepotStations);
             lastLineBalanceTick = level.getGameTime();
         }
-        actions += routeUnassignedTrainsToDepot(ordered, depotHubs, reservedDepotStations);
+        actions += routeUnassignedTrainsToDepot(level, ordered, depotHubs, reservedDepotStations);
         return actions;
     }
 
@@ -133,9 +137,9 @@ public class DepotRuntimeService {
             if (lineDepotHubs.isEmpty()) {
                 continue;
             }
-            int currentTrainCount = lineManager.countAssignedTrains(lineId);
+            int currentTrainCount = countStellwerkAssignedTrains(lineId, trains);
             TrainServiceClass serviceClass = resolveServiceClassForLine(line, lineId);
-            int recommendedTrainCount = linePlanningService.recommendedTrainCount(line, line.stationCount(), serviceClass);
+            int recommendedTrainCount = planningService.recommendedTrainCount(line, line.stationCount(), serviceClass);
             int targetTrainCount = line.settings().resolveTargetTrainCount(recommendedTrainCount);
 
             while (currentTrainCount < targetTrainCount) {
@@ -179,12 +183,21 @@ public class DepotRuntimeService {
                     continue;
                 }
 
-                DiscoveredPath pathToDepot = findPathToDepot(candidate, lineDepotHubs, reservedDepotStations);
-                if (pathToDepot == null || pathToDepot.destination == null) {
+                TrainRoutingResponse routeResponse = requestDepotRoute(
+                    level,
+                    candidate,
+                    lineId,
+                    lineDepotHubs,
+                    reservedDepotStations,
+                    "depot_recall"
+                );
+                if (routeResponse == null || !routeResponse.successful() || routeResponse.path() == null) {
                     recordDepotAction(candidate, "RECALL_SKIPPED line=" + lineId.value() + " reason=no_path_to_depot");
                     continue;
                 }
-                if (candidate.navigation.startNavigation(pathToDepot) < 0D) {
+
+                RoutingAuthorityService routingAuthority = CreateTrainSlothMod.runtime().routingAuthorityService();
+                if (routingAuthority == null || !routingAuthority.executeRoute(candidate, lineId, routeResponse, "depot_recall")) {
                     recordDepotAction(candidate, "RECALL_SKIPPED line=" + lineId.value() + " reason=start_navigation_failed");
                     continue;
                 }
@@ -194,7 +207,8 @@ public class DepotRuntimeService {
                 actions++;
                 recordDepotAction(
                     candidate,
-                    "RECALL line=" + lineId.value() + " destination=" + pathToDepot.destination.name
+                    "RECALL line=" + lineId.value() + " destination="
+                        + (routeResponse.assignedPlatform() == null ? "-" : routeResponse.assignedPlatform())
                 );
             }
         }
@@ -216,9 +230,9 @@ public class DepotRuntimeService {
             }
             LineId lineId = line.id();
             TrainServiceClass serviceClass = resolveServiceClassForLine(line, lineId);
-            int recommendedTrainCount = linePlanningService.recommendedTrainCount(line, line.stationCount(), serviceClass);
+            int recommendedTrainCount = planningService.recommendedTrainCount(line, line.stationCount(), serviceClass);
             int targetTrainCount = line.settings().resolveTargetTrainCount(recommendedTrainCount);
-            currentCountByLine.put(lineId, lineManager.countAssignedTrains(lineId));
+            currentCountByLine.put(lineId, countStellwerkAssignedTrains(lineId, trains));
             targetCountByLine.put(lineId, targetTrainCount);
             serviceClassByLine.put(lineId, serviceClass);
         }
@@ -280,6 +294,9 @@ public class DepotRuntimeService {
             if (train == null || train.derailed || train.graph == null) {
                 continue;
             }
+            if (!isStellwerkControlled(train)) {
+                continue;
+            }
             if (train.runtime == null || train.runtime.state != ScheduleRuntime.State.PRE_TRANSIT) {
                 continue;
             }
@@ -331,6 +348,9 @@ public class DepotRuntimeService {
                 break;
             }
             if (train == null || train.derailed || train.runtime == null || train.runtime.state != ScheduleRuntime.State.PRE_TRANSIT) {
+                continue;
+            }
+            if (!isStellwerkControlled(train)) {
                 continue;
             }
             if (train.navigation.destination != null || recallInProgress.contains(train.id)) {
@@ -385,6 +405,9 @@ public class DepotRuntimeService {
             if (lineRegistry.assignmentOf(train.id).isPresent()) {
                 continue;
             }
+            if (!isStellwerkControlled(train)) {
+                continue;
+            }
 
             GlobalStation currentStation = train.getCurrentStation();
             if (currentStation == null || !matchesAnyHub(currentStation, depotHubs)) {
@@ -426,6 +449,9 @@ public class DepotRuntimeService {
             if (train == null || train.derailed || train.graph == null) {
                 continue;
             }
+            if (!isStellwerkControlled(train)) {
+                continue;
+            }
             Optional<LineId> assignedLine = lineRegistry.assignmentOf(train.id).map(assignment -> assignment.lineId());
             if (assignedLine.isEmpty() || !assignedLine.get().equals(lineId)) {
                 continue;
@@ -443,39 +469,6 @@ public class DepotRuntimeService {
                 .thenComparing(train -> train.id.toString())
         );
         return candidates;
-    }
-
-    private DiscoveredPath findPathToDepot(Train train, List<StationHub> depotHubs) {
-        return findPathToDepot(train, depotHubs, null);
-    }
-
-    private DiscoveredPath findPathToDepot(Train train, List<StationHub> depotHubs, Set<UUID> reservedDepotStations) {
-        if (train == null || train.graph == null) {
-            return null;
-        }
-
-        GlobalStation currentStation = train.getCurrentStation();
-        ArrayList<GlobalStation> candidates = new ArrayList<>();
-        for (GlobalStation station : train.graph.getPoints(EdgePointType.STATION)) {
-            if (currentStation != null && currentStation.id.equals(station.id)) {
-                continue;
-            }
-            if (matchesAnyHub(station, depotHubs)) {
-                if (isDepotStationUnavailableFor(train, station, reservedDepotStations)) {
-                    continue;
-                }
-                candidates.add(station);
-            }
-        }
-
-        if (candidates.isEmpty()) {
-            return null;
-        }
-        DiscoveredPath path = train.navigation.findPathTo(candidates, TrainSlothConfig.ROUTING.maxSearchCost.get());
-        if (path != null && path.destination != null && reservedDepotStations != null) {
-            reservedDepotStations.add(path.destination.id);
-        }
-        return path;
     }
 
     private TrainServiceClass dominantServiceClass(LineId lineId) {
@@ -590,6 +583,31 @@ public class DepotRuntimeService {
         return imminent != null && (self == null || !imminent.id.equals(self.id));
     }
 
+    private boolean isStellwerkControlled(Train train) {
+        return train != null
+            && train.id != null
+            && stellwerkControlModeService != null
+            && stellwerkControlModeService.isStellwerkEnabled(train.id);
+    }
+
+    private int countStellwerkAssignedTrains(LineId lineId, List<Train> trains) {
+        if (lineId == null || trains == null || trains.isEmpty()) {
+            return 0;
+        }
+
+        int count = 0;
+        for (Train train : trains) {
+            if (!isStellwerkControlled(train)) {
+                continue;
+            }
+            Optional<LineId> assignedLine = lineRegistry.assignmentOf(train.id).map(assignment -> assignment.lineId());
+            if (assignedLine.isPresent() && assignedLine.get().equals(lineId)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private void recordDepotAction(Train train, String detail) {
         if (train == null) {
             return;
@@ -606,7 +624,12 @@ public class DepotRuntimeService {
     private record TransferCandidate(Train train, LineId sourceLineId) {
     }
 
-    private int routeUnassignedTrainsToDepot(List<Train> trains, List<StationHub> depotHubs, Set<UUID> reservedDepotStations) {
+    private int routeUnassignedTrainsToDepot(
+        Level level,
+        List<Train> trains,
+        List<StationHub> depotHubs,
+        Set<UUID> reservedDepotStations
+    ) {
         if (depotHubs == null || depotHubs.isEmpty()) {
             return 0;
         }
@@ -614,6 +637,9 @@ public class DepotRuntimeService {
         int routed = 0;
         for (Train train : trains) {
             if (train == null || train.graph == null) {
+                continue;
+            }
+            if (!isStellwerkControlled(train)) {
                 continue;
             }
             if (lineRegistry.assignmentOf(train.id).isPresent()) {
@@ -631,16 +657,97 @@ public class DepotRuntimeService {
                 continue;
             }
 
-            DiscoveredPath pathToDepot = findPathToDepot(train, depotHubs, reservedDepotStations);
-            if (pathToDepot == null || pathToDepot.destination == null) {
+            TrainRoutingResponse routeResponse = requestDepotRoute(
+                level,
+                train,
+                null,
+                depotHubs,
+                reservedDepotStations,
+                "depot_unassigned"
+            );
+            if (routeResponse == null || !routeResponse.successful() || routeResponse.path() == null) {
                 continue;
             }
-            if (train.navigation.startNavigation(pathToDepot) < 0D) {
+
+            RoutingAuthorityService routingAuthority = CreateTrainSlothMod.runtime().routingAuthorityService();
+            if (routingAuthority == null || !routingAuthority.executeRoute(train, null, routeResponse, "depot_unassigned")) {
                 continue;
             }
             routed++;
-            recordDepotAction(train, "UNASSIGNED_TO_DEPOT destination=" + pathToDepot.destination.name);
+            recordDepotAction(
+                train,
+                "UNASSIGNED_TO_DEPOT destination="
+                    + (routeResponse.assignedPlatform() == null ? "-" : routeResponse.assignedPlatform())
+            );
         }
         return routed;
+    }
+
+    @Nullable
+    private TrainRoutingResponse requestDepotRoute(
+        Level level,
+        Train train,
+        @Nullable LineId lineId,
+        List<StationHub> depotHubs,
+        Set<UUID> reservedDepotStations,
+        String requestSource
+    ) {
+        if (train == null || train.graph == null || depotHubs == null || depotHubs.isEmpty()) {
+            return null;
+        }
+
+        RoutingAuthorityService routingAuthority = CreateTrainSlothMod.runtime().routingAuthorityService();
+        if (routingAuthority == null) {
+            return null;
+        }
+
+        List<GlobalStation> candidates = collectDepotCandidates(train, depotHubs, reservedDepotStations);
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        TrainRoutingResponse response = routingAuthority.requestRouteToStations(
+            level,
+            train,
+            lineId,
+            candidates,
+            null,
+            requestSource
+        );
+        if (response != null && response.successful() && response.path() != null && response.path().destination != null) {
+            reservedDepotStations.add(response.path().destination.id);
+        }
+        return response;
+    }
+
+    private List<GlobalStation> collectDepotCandidates(
+        Train train,
+        List<StationHub> depotHubs,
+        Set<UUID> reservedDepotStations
+    ) {
+        if (train == null || train.graph == null || depotHubs == null || depotHubs.isEmpty()) {
+            return List.of();
+        }
+
+        GlobalStation currentStation = train.getCurrentStation();
+        List<GlobalStation> candidates = new ArrayList<>();
+        for (GlobalStation station : train.graph.getPoints(EdgePointType.STATION)) {
+            if (station == null || station.id == null) {
+                continue;
+            }
+            if (currentStation != null && currentStation.id.equals(station.id)) {
+                continue;
+            }
+            if (!matchesAnyHub(station, depotHubs)) {
+                continue;
+            }
+            if (isDepotStationUnavailableFor(train, station, reservedDepotStations)) {
+                continue;
+            }
+            candidates.add(station);
+        }
+
+        candidates.sort(Comparator.comparing(station -> station.id.toString()));
+        return candidates;
     }
 }

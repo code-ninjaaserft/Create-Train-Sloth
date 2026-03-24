@@ -1,7 +1,6 @@
 package dev.elved.createtrainsloth.routing;
 
 import com.simibubi.create.content.trains.entity.Train;
-import com.simibubi.create.content.trains.graph.DiscoveredPath;
 import com.simibubi.create.content.trains.graph.EdgePointType;
 import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
 import com.simibubi.create.content.trains.station.GlobalStation;
@@ -110,10 +109,10 @@ public class ScheduleDestinationResolver {
             return Optional.empty();
         }
 
-        DiscoveredPath bestPath = train.navigation.findPathTo(new ArrayList<>(matchedStations), TrainSlothConfig.ROUTING.maxSearchCost.get());
-        GlobalStation primaryDestination = bestPath != null && bestPath.destination != null
-            ? bestPath.destination
-            : matchedStations.get(0);
+        GlobalStation primaryDestination = choosePrimaryCandidate(train, matchedStations);
+        if (primaryDestination == null) {
+            return Optional.empty();
+        }
 
         String destinationHubId = resolveHubForFilter(parsedFilter.destinationFilter())
             .map(hub -> hub.id().value())
@@ -155,12 +154,9 @@ public class ScheduleDestinationResolver {
             if (mainCandidates.isEmpty()) {
                 return Optional.empty();
             }
-
-            DiscoveredPath bestPath = train.navigation.findPathTo(new ArrayList<>(mainCandidates), TrainSlothConfig.ROUTING.maxSearchCost.get());
-            if (bestPath != null && bestPath.destination != null) {
-                primaryDestination = bestPath.destination;
-            } else {
-                primaryDestination = mainCandidates.get(0);
+            primaryDestination = choosePrimaryCandidate(train, mainCandidates);
+            if (primaryDestination == null) {
+                return Optional.empty();
             }
         }
 
@@ -201,10 +197,7 @@ public class ScheduleDestinationResolver {
                 .filter(station -> currentStationId == null || !station.id.equals(currentStationId))
                 .toList();
             List<GlobalStation> searchPool = preferredStations.isEmpty() ? lineStations : preferredStations;
-            DiscoveredPath bestPath = train.navigation.findPathTo(new ArrayList<>(searchPool), TrainSlothConfig.ROUTING.maxSearchCost.get());
-            if (bestPath != null && bestPath.destination != null) {
-                primary = bestPath.destination;
-            } else if (!searchPool.isEmpty()) {
+            if (!searchPool.isEmpty()) {
                 primary = searchPool.get(0);
             }
         }
@@ -212,8 +205,31 @@ public class ScheduleDestinationResolver {
         if (primary == null) {
             primary = lineStations.get(0);
         }
+        if (primary == null) {
+            return Optional.empty();
+        }
 
         return Optional.of(new MainDestinationResolution(primary, List.copyOf(lineStations), "line:" + line.id().value(), null));
+    }
+
+    private GlobalStation choosePrimaryCandidate(Train train, List<GlobalStation> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        GlobalStation current = train == null ? null : train.getCurrentStation();
+        if (current != null) {
+            for (GlobalStation candidate : candidates) {
+                if (candidate != null && !candidate.id.equals(current.id)) {
+                    return candidate;
+                }
+            }
+        }
+        for (GlobalStation candidate : candidates) {
+            if (candidate != null) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private ResolvedFilter resolveMainInstructionFilter(List<GlobalStation> allStations, DestinationInstruction instruction) {

@@ -39,6 +39,9 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
     private static final String[] SERVICE_CLASSES = { "S", "IR", "RE", "IC", "ICN", "ICE" };
 
     private Button generateButton;
+    private Button minimumDwellDecButton;
+    private Button minimumDwellValueButton;
+    private Button minimumDwellIncButton;
     private Button linePrevButton;
     private Button lineNextButton;
     private Button manualCountModeButton;
@@ -76,12 +79,38 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
 
         int contentLeft = leftPos + 12;
 
-        generateButton = addRenderableWidget(new RouteStyledButton(
-            contentLeft + 160,
+        minimumDwellDecButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 120,
             topPos + 8,
-            52,
+            16,
             14,
-            Component.translatable("create_train_sloth.line_manager.button.generate"),
+            Component.literal("-"),
+            button -> sendMenuButton(LineManagerComputerMenu.BUTTON_MINIMUM_DWELL_DEC)
+        ));
+        minimumDwellValueButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 138,
+            topPos + 8,
+            36,
+            14,
+            minimumDwellText(),
+            button -> {
+            }
+        ));
+        minimumDwellValueButton.active = false;
+        minimumDwellIncButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 176,
+            topPos + 8,
+            16,
+            14,
+            Component.literal("+"),
+            button -> sendMenuButton(LineManagerComputerMenu.BUTTON_MINIMUM_DWELL_INC)
+        ));
+        generateButton = addRenderableWidget(new RouteStyledButton(
+            contentLeft + 194,
+            topPos + 8,
+            18,
+            14,
+            Component.literal("G"),
             button -> sendMenuButton(LineManagerComputerMenu.BUTTON_GENERATE_LINES)
         ));
 
@@ -227,6 +256,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
             syncFromMenuSelection();
         }
         manualCountModeButton.setMessage(manualCountModeText());
+        minimumDwellValueButton.setMessage(minimumDwellText());
         clampSelectionAndScroll();
         updateButtonState();
     }
@@ -264,6 +294,7 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
                 menu.selectedLineTargetTrainCount()
             ).getString();
             graphics.drawString(font, trimToWidth(target, 72), 152, 20, 0xD7CEB8, false);
+            graphics.drawString(font, trimToWidth(targetIntervalText(), 72), 152, 30, 0xD7CEB8, false);
         } else {
             graphics.drawString(
                 font,
@@ -615,6 +646,8 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
         boolean hasSelection = selectedStationIndex >= 0 && selectedStationIndex < routeStations().size();
 
         generateButton.active = true;
+        minimumDwellDecButton.active = hasLine;
+        minimumDwellIncButton.active = hasLine;
         linePrevButton.active = menu.lineCount() > 0;
         lineNextButton.active = menu.lineCount() > 0;
         manualCountModeButton.active = hasLine;
@@ -722,6 +755,23 @@ public class LineManagerComputerScreen extends AbstractContainerScreen<LineManag
                 ? "create_train_sloth.line_manager.button.manual_mode_on"
                 : "create_train_sloth.line_manager.button.manual_mode_off"
         );
+    }
+
+    private Component minimumDwellText() {
+        if ("-".equals(menu.selectedLineLabel())) {
+            return Component.literal("--");
+        }
+        int seconds = Math.max(0, Math.round(menu.selectedLineMinimumDwellTicks() / 20F));
+        return Component.literal(seconds + "s");
+    }
+
+    private String targetIntervalText() {
+        if ("-".equals(menu.selectedLineLabel())) {
+            return Component.translatable("create_train_sloth.line_manager.target_interval_none").getString();
+        }
+        int ticks = Math.max(0, menu.selectedLineTargetIntervalTicks());
+        int seconds = Math.max(0, Math.round(ticks / 20F));
+        return Component.translatable("create_train_sloth.line_manager.target_interval", seconds).getString();
     }
 
     private static class RouteStyledButton extends Button {

@@ -11,6 +11,7 @@ import dev.elved.createtrainsloth.config.TrainSlothConfig;
 import dev.elved.createtrainsloth.debug.DebugOverlay;
 import dev.elved.createtrainsloth.dispatch.DispatchController;
 import dev.elved.createtrainsloth.interlocking.InterlockingControlService;
+import dev.elved.createtrainsloth.interlocking.StellwerkControlModeService;
 import dev.elved.createtrainsloth.interlocking.schematic.SectionIdHelper;
 import dev.elved.createtrainsloth.line.LineId;
 import dev.elved.createtrainsloth.line.LineManager;
@@ -35,6 +36,7 @@ public class RoutingAuthorityService {
 
     private static final String STAGE_ROUTER_CALLED = "ROUTER_CALLED";
     private static final String STAGE_RESPONSE_BUILT = "RESPONSE_BUILT";
+    private static final String STAGE_ROUTE_EXECUTED = "ROUTE_EXECUTED";
     private static final long MISSION_HEALTHCHECK_INTERVAL_TICKS = 20L * 5L;
     private static final int DEFAULT_ARRIVAL_ESTIMATE_TICKS = 20 * 30;
     private static final int MIN_ARRIVAL_ESTIMATE_TICKS = 20;
@@ -49,6 +51,7 @@ public class RoutingAuthorityService {
     private final ScheduleAlternativeResolver scheduleAlternativeResolver;
     private final ScheduleDestinationResolver scheduleDestinationResolver;
     private final InterlockingControlService interlockingControlService;
+    private final StellwerkControlModeService stellwerkControlModeService;
     private final DepotRuntimeService depotRuntimeService;
     private final TrainMissionService trainMissionService;
     private final DebugOverlay debugOverlay;
@@ -65,6 +68,7 @@ public class RoutingAuthorityService {
         ScheduleAlternativeResolver scheduleAlternativeResolver,
         StationHubRegistry stationHubRegistry,
         InterlockingControlService interlockingControlService,
+        StellwerkControlModeService stellwerkControlModeService,
         DepotRuntimeService depotRuntimeService,
         TrainMissionService trainMissionService,
         DebugOverlay debugOverlay
@@ -82,6 +86,7 @@ public class RoutingAuthorityService {
             lineManager
         );
         this.interlockingControlService = interlockingControlService;
+        this.stellwerkControlModeService = stellwerkControlModeService;
         this.depotRuntimeService = depotRuntimeService;
         this.trainMissionService = trainMissionService;
         this.debugOverlay = debugOverlay;
@@ -132,6 +137,9 @@ public class RoutingAuthorityService {
             if (train.runtime == null || train.runtime.paused) {
                 continue;
             }
+            if (!isStellwerkControlled(train)) {
+                continue;
+            }
             if (isRecallInProgress(train.id)) {
                 continue;
             }
@@ -147,8 +155,8 @@ public class RoutingAuthorityService {
                 continue;
             }
 
-            double result = train.navigation.startNavigation(response.path());
-            if (result < 0D) {
+            LineId lineId = lineManager.lineForTrain(train).map(TrainLine::id).orElse(null);
+            if (!executeRoute(train, lineId, response, "manual_mission_ping")) {
                 continue;
             }
 
@@ -193,6 +201,12 @@ public class RoutingAuthorityService {
             if (train.runtime == null || train.runtime.paused) {
                 continue;
             }
+            if (!isStellwerkControlled(train)) {
+                if (debugOverlay != null) {
+                    debugOverlay.clearMission(train.id);
+                }
+                continue;
+            }
             if (isRecallInProgress(train.id)) {
                 if (debugOverlay != null) {
                     debugOverlay.recordMission(train.id, "MISSION_HEALTHCHECK_SKIP reason=recall_in_progress");
@@ -207,11 +221,22 @@ public class RoutingAuthorityService {
                 }
                 continue;
             }
+            TrainLine line = assignedLine.get();
+
+            if (shouldDeferToDispatch(train, line)) {
+                if (debugOverlay != null) {
+                    debugOverlay.recordMission(
+                        train.id,
+                        "MISSION_HEALTHCHECK_WAIT status=dispatch_headway_control"
+                    );
+                }
+                continue;
+            }
 
             boolean missionEmpty = trainMissionService == null || trainMissionService.peekMissionDestination(train.id).isEmpty();
             if (missionEmpty && debugOverlay != null) {
                 String current = train.getCurrentStation() == null ? "<unknown>" : train.getCurrentStation().name;
-                String lineId = assignedLine.map(line -> line.id().value()).orElse("<none>");
+                String lineId = line.id().value();
                 debugOverlay.recordMission(
                     train.id,
                     "MISSION_EMPTY_REPORT tick=" + gameTime
@@ -240,12 +265,11 @@ public class RoutingAuthorityService {
                 continue;
             }
 
-            double navigationResult = train.navigation.startNavigation(response.path());
-            if (navigationResult < 0D) {
+            if (!executeRoute(train, line.id(), response, "mission_healthcheck")) {
                 if (debugOverlay != null) {
                     debugOverlay.recordMission(
                         train.id,
-                        "MISSION_HEALTHCHECK_START_FAILED result=" + navigationResult
+                        "MISSION_HEALTHCHECK_START_FAILED"
                             + " platform=" + (response.assignedPlatform() == null ? "-" : response.assignedPlatform())
                     );
                 }
@@ -277,6 +301,18 @@ public class RoutingAuthorityService {
                 TrainRoutingResponse.invalidRequest(request.correlationId(), "train_missing", "Train was null in schedule request")
             );
         }
+        if (!isStellwerkControlled(train)) {
+            return finalizeResponse(
+                train,
+                request.lineId(),
+                TrainRoutingResponse.noDestination(
+                    request.correlationId(),
+                    null,
+                    "stellwerk_mode_disabled",
+                    "Train has not enabled Stellwerk router mode in schedule"
+                )
+            );
+        }
         if (isRecallInProgress(train.id)) {
             return finalizeResponse(
                 train,
@@ -297,24 +333,26 @@ public class RoutingAuthorityService {
             STAGE_ROUTER_CALLED,
             "source=" + request.requestSource()
                 + " line=" + (request.lineId() == null ? "<none>" : request.lineId().value())
-                + " destination=<resolved_from_schedule>"
+                + " trainName=" + (request.trainName() == null ? "<unnamed>" : request.trainName())
+                + " destination=<resolved_from_mission>"
         );
 
         Optional<TrainLine> assignedLine = lineManager.lineForTrain(train);
-        if (assignedLine.isPresent()) {
-            Optional<ScheduleDestinationResolver.DestinationContext> missionContext = resolveMissionDestination(train);
-            if (missionContext.isPresent()) {
-                TrainRoutingRequest missionRequest = TrainRoutingRequest.create(
+        if (assignedLine.isEmpty()) {
+            return finalizeResponse(
+                train,
+                request.lineId(),
+                TrainRoutingResponse.noDestination(
                     request.correlationId(),
-                    request.trainId(),
-                    request.lineId(),
-                    request.currentLocation(),
-                    missionContext.get().sourceFilter(),
-                    request.requestSource() + ":mission"
-                );
-                return routeToContext(level, train, missionRequest, missionContext.get());
-            }
+                    null,
+                    "line_unassigned",
+                    "Train is in Stellwerk mode but has no assigned line"
+                )
+            );
+        }
 
+        Optional<ScheduleDestinationResolver.DestinationContext> missionContext = resolveMissionDestination(train);
+        if (missionContext.isEmpty()) {
             LineId assignedLineId = assignedLine.get().id();
             return finalizeResponse(
                 train,
@@ -328,29 +366,16 @@ public class RoutingAuthorityService {
             );
         }
 
-        Optional<ScheduleDestinationResolver.DestinationContext> destinationContext = scheduleDestinationResolver.resolve(train);
-        if (destinationContext.isEmpty()) {
-            return finalizeResponse(
-                train,
-                request.lineId(),
-                TrainRoutingResponse.noDestination(
-                    request.correlationId(),
-                    null,
-                    "no_schedule_destination",
-                    "No destination context could be resolved from current schedule state"
-                )
-            );
-        }
-
-        TrainRoutingRequest resolvedRequest = TrainRoutingRequest.create(
+        TrainRoutingRequest missionRequest = TrainRoutingRequest.create(
             request.correlationId(),
             request.trainId(),
+            request.trainName(),
             request.lineId(),
             request.currentLocation(),
-            destinationContext.get().sourceFilter(),
-            request.requestSource()
+            missionContext.get().sourceFilter(),
+            request.requestSource() + ":mission"
         );
-        return routeToContext(level, train, resolvedRequest, destinationContext.get());
+        return routeToContext(level, train, missionRequest, missionContext.get());
     }
 
     public TrainRoutingResponse requestRoute(Level level, Train train, TrainRoutingRequest request) {
@@ -372,7 +397,10 @@ public class RoutingAuthorityService {
             request.lineId(),
             correlationId,
             STAGE_ROUTER_CALLED,
-            "source=" + request.requestSource() + " destination=" + request.requestedDestination()
+            "source=" + request.requestSource()
+                + " trainName=" + (request.trainName() == null ? "<unnamed>" : request.trainName())
+                + " line=" + (request.lineId() == null ? "<none>" : request.lineId().value())
+                + " destination=" + request.requestedDestination()
         );
 
         if (train == null) {
@@ -380,6 +408,18 @@ public class RoutingAuthorityService {
                 null,
                 request.lineId(),
                 TrainRoutingResponse.invalidRequest(correlationId, "train_missing", "Train was null in router call")
+            );
+        }
+        if (!isStellwerkControlled(train)) {
+            return finalizeResponse(
+                train,
+                request.lineId(),
+                TrainRoutingResponse.noDestination(
+                    correlationId,
+                    null,
+                    "stellwerk_mode_disabled",
+                    "Train has not enabled Stellwerk router mode in schedule"
+                )
             );
         }
         if (isRecallInProgress(train.id)) {
@@ -422,6 +462,7 @@ public class RoutingAuthorityService {
             effectiveRequest = TrainRoutingRequest.create(
                 request.correlationId(),
                 request.trainId(),
+                request.trainName(),
                 assignedLineId,
                 request.currentLocation(),
                 request.requestedDestination(),
@@ -455,18 +496,208 @@ public class RoutingAuthorityService {
         return routeToContext(level, train, effectiveRequest, destinationContext.get());
     }
 
+    public TrainRoutingResponse requestRouteToStations(
+        Level level,
+        Train train,
+        @Nullable LineId lineId,
+        List<GlobalStation> candidateStations,
+        @Nullable String destinationHubId,
+        String requestSource
+    ) {
+        TrainRoutingRequest baseRequest = buildRequestFromTrain(train, "<runtime_candidates>", requestSource);
+        if (train == null) {
+            return finalizeResponse(
+                null,
+                lineId,
+                TrainRoutingResponse.invalidRequest(baseRequest.correlationId(), "train_missing", "Train was null in station-candidate request")
+            );
+        }
+        if (!isStellwerkControlled(train)) {
+            return finalizeResponse(
+                train,
+                lineId,
+                TrainRoutingResponse.noDestination(
+                    baseRequest.correlationId(),
+                    destinationHubId,
+                    "stellwerk_mode_disabled",
+                    "Train has not enabled Stellwerk router mode in schedule"
+                )
+            );
+        }
+        if (isRecallInProgress(train.id)) {
+            return finalizeResponse(
+                train,
+                lineId,
+                TrainRoutingResponse.noDestination(
+                    baseRequest.correlationId(),
+                    destinationHubId,
+                    "recall_in_progress",
+                    "Train is currently being recalled to depot"
+                )
+            );
+        }
+        if (train.graph == null) {
+            return finalizeResponse(
+                train,
+                lineId,
+                TrainRoutingResponse.invalidRequest(
+                    baseRequest.correlationId(),
+                    "train_graph_missing",
+                    "Train graph unavailable"
+                )
+            );
+        }
+
+        List<GlobalStation> orderedCandidates = new ArrayList<>();
+        if (candidateStations != null) {
+            for (GlobalStation candidate : candidateStations) {
+                if (candidate == null || candidate.id == null) {
+                    continue;
+                }
+                orderedCandidates.add(candidate);
+            }
+        }
+        orderedCandidates.sort(Comparator.comparing(station -> station.id.toString()));
+
+        if (orderedCandidates.isEmpty()) {
+            return finalizeResponse(
+                train,
+                lineId,
+                TrainRoutingResponse.noDestination(
+                    baseRequest.correlationId(),
+                    destinationHubId,
+                    "candidate_stations_missing",
+                    "No candidate destination stations were provided"
+                )
+            );
+        }
+
+        GlobalStation primary = selectPrimaryCandidate(train, orderedCandidates);
+        TrainRoutingRequest request = TrainRoutingRequest.create(
+            baseRequest.correlationId(),
+            baseRequest.trainId(),
+            baseRequest.trainName(),
+            lineId == null ? baseRequest.lineId() : lineId,
+            baseRequest.currentLocation(),
+            "<runtime_candidates>",
+            requestSource
+        );
+        ScheduleDestinationResolver.DestinationContext context = new ScheduleDestinationResolver.DestinationContext(
+            primary,
+            List.copyOf(orderedCandidates),
+            Map.of(),
+            "<runtime_candidates>",
+            destinationHubId,
+            List.of()
+        );
+        return routeToContext(level, train, request, context);
+    }
+
+    public boolean executeRoute(
+        Train train,
+        @Nullable LineId lineId,
+        TrainRoutingResponse response,
+        String executionSource
+    ) {
+        if (train == null || response == null || !response.successful() || response.path() == null) {
+            return false;
+        }
+
+        double navigationResult = train.navigation.startNavigation(response.path());
+        boolean success = navigationResult >= 0D;
+        String detail = "source=" + executionSource
+            + " result=" + navigationResult
+            + " platform=" + (response.assignedPlatform() == null ? "-" : response.assignedPlatform())
+            + " status=" + response.status();
+        recordStage(train, lineId, response.correlationId(), STAGE_ROUTE_EXECUTED, detail);
+
+        if (!success) {
+            debugOverlay.recordRouterBreakpoint(
+                train.id,
+                lineId,
+                response.correlationId(),
+                STAGE_ROUTE_EXECUTED,
+                "start_navigation_failed"
+            );
+        }
+
+        return success;
+    }
+
     private TrainRoutingRequest buildRequestFromTrain(Train train, String destinationFilter, String requestSource) {
         String correlationId = nextCorrelationId(train);
         if (train == null) {
-            return TrainRoutingRequest.create(correlationId, new UUID(0L, 0L), null, null, destinationFilter, requestSource);
+            return TrainRoutingRequest.create(correlationId, new UUID(0L, 0L), null, null, null, destinationFilter, requestSource);
         }
         LineId lineId = lineManager.lineForTrain(train).map(line -> line.id()).orElse(null);
         String currentLocation = train.getCurrentStation() == null ? null : train.getCurrentStation().name;
-        return TrainRoutingRequest.create(correlationId, train.id, lineId, currentLocation, destinationFilter, requestSource);
+        return TrainRoutingRequest.create(
+            correlationId,
+            train.id,
+            resolveTrainName(train),
+            lineId,
+            currentLocation,
+            destinationFilter,
+            requestSource
+        );
     }
 
     public boolean isRecallInProgress(UUID trainId) {
         return depotRuntimeService != null && depotRuntimeService.isRecallInProgress(trainId);
+    }
+
+    private boolean isStellwerkControlled(Train train) {
+        return train != null
+            && stellwerkControlModeService != null
+            && stellwerkControlModeService.isStellwerkEnabled(train.id);
+    }
+
+    private boolean shouldDeferToDispatch(Train train, TrainLine line) {
+        if (!TrainSlothConfig.DISPATCH.enableAutomaticDispatch.get()) {
+            return false;
+        }
+        if (dispatchController == null || train == null || line == null) {
+            return false;
+        }
+        if (train.runtime == null || train.runtime.state != ScheduleRuntime.State.PRE_TRANSIT) {
+            return false;
+        }
+        if (train.navigation.destination != null) {
+            return false;
+        }
+
+        GlobalStation currentStation = train.getCurrentStation();
+        if (currentStation == null) {
+            return false;
+        }
+        return lineManager.isStationOnLine(line, currentStation);
+    }
+
+    private GlobalStation selectPrimaryCandidate(Train train, List<GlobalStation> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        GlobalStation currentStation = train == null ? null : train.getCurrentStation();
+        if (currentStation != null) {
+            for (GlobalStation candidate : candidates) {
+                if (!currentStation.id.equals(candidate.id)) {
+                    return candidate;
+                }
+            }
+        }
+        return candidates.get(0);
+    }
+
+    @Nullable
+    private String resolveTrainName(Train train) {
+        if (train == null || train.name == null) {
+            return null;
+        }
+        String resolved = train.name.getString();
+        if (resolved == null || resolved.isBlank()) {
+            return null;
+        }
+        return resolved;
     }
 
     private RouteSelection selectBestPath(

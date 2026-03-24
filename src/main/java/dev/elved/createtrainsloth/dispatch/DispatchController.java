@@ -1,8 +1,6 @@
 package dev.elved.createtrainsloth.dispatch;
 
 import com.simibubi.create.content.trains.entity.Train;
-import com.simibubi.create.content.trains.graph.DiscoveredPath;
-import com.simibubi.create.content.trains.graph.EdgePointType;
 import com.simibubi.create.content.trains.schedule.Schedule;
 import com.simibubi.create.content.trains.schedule.ScheduleRuntime;
 import com.simibubi.create.content.trains.schedule.destination.DestinationInstruction;
@@ -10,12 +8,13 @@ import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.CreateTrainSlothMod;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
 import dev.elved.createtrainsloth.debug.DebugOverlay;
+import dev.elved.createtrainsloth.interlocking.StellwerkControlModeService;
 import dev.elved.createtrainsloth.line.LineId;
 import dev.elved.createtrainsloth.line.LineManager;
 import dev.elved.createtrainsloth.line.LineRuntimeState;
 import dev.elved.createtrainsloth.line.TrainLine;
 import dev.elved.createtrainsloth.line.TrainServiceClass;
-import dev.elved.createtrainsloth.routing.PlatformAssignmentService;
+import dev.elved.createtrainsloth.routing.RoutingAuthorityService;
 import dev.elved.createtrainsloth.routing.TrainRoutingResponse;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -31,27 +30,26 @@ import net.minecraft.world.level.Level;
 public class DispatchController {
 
     private static final int DISPATCH_TOKEN_DURATION = 40;
-    private static final int ENFORCED_MINIMUM_DWELL_TICKS = 220;
 
     private final LineManager lineManager;
     private final StationStateTracker stationStateTracker;
     private final HeadwayCalculator headwayCalculator;
-    private final PlatformAssignmentService platformAssignmentService;
     private final DebugOverlay debugOverlay;
+    private final StellwerkControlModeService stellwerkControlModeService;
     private final Map<UUID, Integer> consecutiveHoldByTrain = new HashMap<>();
 
     public DispatchController(
         LineManager lineManager,
         StationStateTracker stationStateTracker,
         HeadwayCalculator headwayCalculator,
-        PlatformAssignmentService platformAssignmentService,
-        DebugOverlay debugOverlay
+        DebugOverlay debugOverlay,
+        StellwerkControlModeService stellwerkControlModeService
     ) {
         this.lineManager = lineManager;
         this.stationStateTracker = stationStateTracker;
         this.headwayCalculator = headwayCalculator;
-        this.platformAssignmentService = platformAssignmentService;
         this.debugOverlay = debugOverlay;
+        this.stellwerkControlModeService = stellwerkControlModeService;
     }
 
     public void preRailwayTick(Level level, Collection<Train> trains) {
@@ -128,6 +126,9 @@ public class DispatchController {
         ordered.sort(Comparator.comparing(train -> train.id.toString()));
 
         for (Train train : ordered) {
+            if (stellwerkControlModeService == null || !stellwerkControlModeService.isStellwerkEnabled(train.id)) {
+                continue;
+            }
             Optional<TrainLine> optionalLine = lineManager.lineForTrain(train);
             if (optionalLine.isEmpty()) {
                 continue;
@@ -180,6 +181,9 @@ public class DispatchController {
         if (train.derailed || train.graph == null) {
             return false;
         }
+        if (stellwerkControlModeService == null || !stellwerkControlModeService.isStellwerkEnabled(train.id)) {
+            return false;
+        }
         if (CreateTrainSlothMod.runtime().routingAuthorityService() != null
             && CreateTrainSlothMod.runtime().routingAuthorityService().isRecallInProgress(train.id)) {
             return false;
@@ -218,8 +222,7 @@ public class DispatchController {
             arrivedAt = gameTick;
         }
 
-        int minimumDwell = line.settings().resolveMinimumDwellTicks() + line.settings().resolveDwellExtensionTicks();
-        minimumDwell = Math.max(ENFORCED_MINIMUM_DWELL_TICKS, minimumDwell);
+        int minimumDwell = resolveMinimumDwellTicks(line, runtimeState, headwayTicks, gameTick);
         long dwellElapsed = Math.max(0, gameTick - arrivedAt);
         if (dwellElapsed < minimumDwell) {
             return DispatchDecision.hold("minimum dwell " + dwellElapsed + "/" + minimumDwell);
@@ -254,6 +257,30 @@ public class DispatchController {
         return DispatchDecision.allow();
     }
 
+    private int resolveMinimumDwellTicks(
+        TrainLine line,
+        LineRuntimeState runtimeState,
+        int headwayTicks,
+        long gameTick
+    ) {
+        int baseDwellTicks = Math.max(0, line.settings().resolveMinimumDwellTicks());
+        int stabilizationTicks = Math.max(0, line.settings().resolveDwellExtensionTicks());
+        if (stabilizationTicks == 0) {
+            return baseDwellTicks;
+        }
+
+        long lastDeparture = runtimeState.lastDepartureTick();
+        if (lastDeparture == Long.MIN_VALUE) {
+            return baseDwellTicks + stabilizationTicks;
+        }
+
+        long elapsedSinceLastDeparture = Math.max(0, gameTick - lastDeparture);
+        if (elapsedSinceLastDeparture >= Math.max(0, headwayTicks)) {
+            return baseDwellTicks;
+        }
+        return baseDwellTicks + stabilizationTicks;
+    }
+
     private void hold(Train train, LineId lineId, String reason) {
         train.runtime.startCooldown();
         int holdStreak = consecutiveHoldByTrain.merge(train.id, 1, Integer::sum);
@@ -284,6 +311,9 @@ public class DispatchController {
     }
 
     private boolean needsStellwerkDirectedDeparture(Train train) {
+        if (stellwerkControlModeService != null && stellwerkControlModeService.isStellwerkEnabled(train.id)) {
+            return true;
+        }
         if (train.runtime == null) {
             return true;
         }
@@ -302,69 +332,17 @@ public class DispatchController {
     }
 
     private boolean prepareDeparturePath(Level level, Train train, TrainLine line) {
-        if (train.graph == null) {
+        if (train.graph == null || line == null) {
             return false;
         }
 
-        GlobalStation currentStation = train.getCurrentStation();
-        DiscoveredPath selectedPath = null;
-
-        if (CreateTrainSlothMod.runtime().routingAuthorityService() != null) {
-            TrainRoutingResponse routerResponse = CreateTrainSlothMod.runtime()
-                .routingAuthorityService()
-                .requestRouteForCurrentSchedule(level, train);
-            if (routerResponse.successful()) {
-                selectedPath = routerResponse.path();
-            }
-        }
-
-        if (selectedPath == null && platformAssignmentService != null) {
-            selectedPath = platformAssignmentService.assignmentForTrain(train.id)
-                .map(assignment -> resolveStationById(train, assignment.stationId()))
-                .filter(station -> station != null && (currentStation == null || !station.id.equals(currentStation.id)))
-                .map(station -> train.navigation.findPathTo(station, TrainSlothConfig.ROUTING.maxSearchCost.get()))
-                .orElse(null);
-        }
-
-        if (selectedPath == null) {
-            List<GlobalStation> targets = new ArrayList<>();
-            for (GlobalStation station : train.graph.getPoints(EdgePointType.STATION)) {
-                if (!lineManager.isStationOnLine(line, station)) {
-                    continue;
-                }
-                if (currentStation != null && station.id.equals(currentStation.id)) {
-                    continue;
-                }
-                targets.add(station);
-            }
-
-            if (targets.isEmpty() && currentStation != null && lineManager.isStationOnLine(line, currentStation)) {
-                targets.add(currentStation);
-            }
-            if (targets.isEmpty()) {
-                return false;
-            }
-
-            selectedPath = train.navigation.findPathTo(new ArrayList<>(targets), TrainSlothConfig.ROUTING.maxSearchCost.get());
-        }
-
-        if (selectedPath == null || selectedPath.destination == null) {
+        RoutingAuthorityService routingAuthority = CreateTrainSlothMod.runtime().routingAuthorityService();
+        if (routingAuthority == null) {
             return false;
         }
 
-        return train.navigation.startNavigation(selectedPath) >= 0D;
-    }
-
-    private GlobalStation resolveStationById(Train train, java.util.UUID stationId) {
-        if (train == null || train.graph == null || stationId == null) {
-            return null;
-        }
-        for (GlobalStation station : train.graph.getPoints(EdgePointType.STATION)) {
-            if (stationId.equals(station.id)) {
-                return station;
-            }
-        }
-        return null;
+        TrainRoutingResponse routerResponse = routingAuthority.requestRouteForCurrentSchedule(level, train);
+        return routingAuthority.executeRoute(train, line.id(), routerResponse, "dispatch_release");
     }
 
     private boolean hasResolvableScheduleRoute(Level level, Train train) {

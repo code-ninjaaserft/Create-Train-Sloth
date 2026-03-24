@@ -9,13 +9,12 @@ import dev.elved.createtrainsloth.interlocking.schematic.StellwerkSchematicSnaps
 import dev.elved.createtrainsloth.interlocking.schematic.StellwerkSectionState;
 import dev.elved.createtrainsloth.interlocking.schematic.StellwerkSectionView;
 import dev.elved.createtrainsloth.interlocking.schematic.StellwerkTrainView;
-import dev.elved.createtrainsloth.line.InterlockingPlanningService;
 import dev.elved.createtrainsloth.line.LineId;
-import dev.elved.createtrainsloth.line.LinePlanningService;
 import dev.elved.createtrainsloth.line.LineRegistry;
 import dev.elved.createtrainsloth.line.TrainLine;
 import dev.elved.createtrainsloth.line.TrainServiceClass;
 import dev.elved.createtrainsloth.menu.StellwerkMenu;
+import dev.elved.createtrainsloth.planning.PlanningService;
 import dev.elved.createtrainsloth.registry.TrainSlothRegistries;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -72,7 +71,6 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
     private final List<String> syncedSelectedLineStations = new ArrayList<>();
     private final Map<String, TrainServiceClass> routeServiceByLine = new LinkedHashMap<>();
     private final Map<String, List<String>> routeStationsByLine = new LinkedHashMap<>();
-    private final InterlockingPlanningService interlockingPlanningService = new InterlockingPlanningService();
     private StellwerkSchematicSnapshot schematicSnapshot = StellwerkSchematicSnapshot.empty();
     private boolean autoRoutingEnabled = true;
     private long lastSnapshotTick = Long.MIN_VALUE;
@@ -240,7 +238,7 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return 0;
         }
 
-        LinePlanningService planningService = CreateTrainSlothMod.runtime().linePlanningService();
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
         if (planningService == null) {
             int stationCount = Math.max(1, syncedSelectedLineStations.size());
             int base = Math.max(1, (int) Math.ceil(stationCount / 2.5D));
@@ -293,13 +291,15 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return false;
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
         TrainServiceClass serviceClass = routeServiceByLine.getOrDefault(lineId, TrainServiceClass.RE);
-        lineRegistry.assignTrain(trainId, new LineId(lineId), serviceClass);
+        if (!planningService.assignTrainToLine(trainId, lineId, serviceClass)) {
+            return false;
+        }
         refreshControlData(level);
         setChangedAndSync();
         return true;
@@ -315,12 +315,14 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return false;
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
-        lineRegistry.unassignTrain(trainId);
+        if (!planningService.unassignTrain(trainId)) {
+            return false;
+        }
         refreshControlData(level);
         setChangedAndSync();
         return true;
@@ -331,18 +333,12 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return false;
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
-        boolean generatedAny = interlockingPlanningService.generateLinesFromHubs(
-            lineRegistry,
-            CreateTrainSlothMod.runtime().stationHubRegistry() == null
-                ? List.of()
-                : CreateTrainSlothMod.runtime().stationHubRegistry().allHubs(),
-            schematicSnapshot.trains()
-        );
+        boolean generatedAny = planningService.generateLinesFromHubs(schematicSnapshot.trains());
         if (!generatedAny) {
             return false;
         }
@@ -362,13 +358,12 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return false;
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
-        Optional<String> createdLine = interlockingPlanningService.createRoute(
-            lineRegistry,
+        Optional<String> createdLine = planningService.createRoute(
             routeStationsByLine,
             routeServiceByLine,
             routeName,
@@ -391,13 +386,12 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
         }
 
         String lineId = selectedLineLabel();
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
-        boolean changed = interlockingPlanningService.updateRouteMeta(
-            lineRegistry,
+        boolean changed = planningService.updateRouteMeta(
             routeServiceByLine,
             lineId,
             routeNameRaw,
@@ -422,13 +416,12 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return false;
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
-        boolean removed = interlockingPlanningService.deleteRoute(
-            lineRegistry,
+        boolean removed = planningService.deleteRoute(
             routeServiceByLine,
             routeStationsByLine,
             lineIdValue
@@ -453,13 +446,12 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return false;
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
-        boolean changed = interlockingPlanningService.editRouteStation(
-            lineRegistry,
+        boolean changed = planningService.editRouteStation(
             routeStationsByLine,
             routeServiceByLine,
             lineIdValue,
@@ -485,13 +477,12 @@ public class InterlockingBlockEntity extends BlockEntity implements MenuProvider
             return false;
         }
 
-        LineRegistry lineRegistry = CreateTrainSlothMod.runtime().lineRegistry();
-        if (lineRegistry == null) {
+        PlanningService planningService = CreateTrainSlothMod.runtime().planningService();
+        if (planningService == null) {
             return false;
         }
 
-        boolean moved = interlockingPlanningService.moveRouteStation(
-            lineRegistry,
+        boolean moved = planningService.moveRouteStation(
             routeStationsByLine,
             lineIdValue,
             fromIndex,

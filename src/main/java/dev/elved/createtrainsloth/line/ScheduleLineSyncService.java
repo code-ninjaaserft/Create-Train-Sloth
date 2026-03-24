@@ -10,6 +10,7 @@ import com.simibubi.create.content.trains.schedule.destination.DestinationInstru
 import com.simibubi.create.content.trains.schedule.destination.ScheduleInstruction;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import dev.elved.createtrainsloth.config.TrainSlothConfig;
+import dev.elved.createtrainsloth.interlocking.StellwerkControlModeService;
 import dev.elved.createtrainsloth.station.StationHub;
 import dev.elved.createtrainsloth.station.StationHubId;
 import dev.elved.createtrainsloth.station.StationHubRegistry;
@@ -28,11 +29,17 @@ public class ScheduleLineSyncService {
 
     private final LineRegistry lineRegistry;
     private final StationHubRegistry stationHubRegistry;
+    private final StellwerkControlModeService stellwerkControlModeService;
     private final Map<UUID, LineId> managedAssignments = new HashMap<>();
 
-    public ScheduleLineSyncService(LineRegistry lineRegistry, StationHubRegistry stationHubRegistry) {
+    public ScheduleLineSyncService(
+        LineRegistry lineRegistry,
+        StationHubRegistry stationHubRegistry,
+        StellwerkControlModeService stellwerkControlModeService
+    ) {
         this.lineRegistry = lineRegistry;
         this.stationHubRegistry = stationHubRegistry;
+        this.stellwerkControlModeService = stellwerkControlModeService;
     }
 
     public void syncFromSchedules(List<Train> trains) {
@@ -46,6 +53,10 @@ public class ScheduleLineSyncService {
         Set<UUID> seenTrains = new LinkedHashSet<>();
         for (Train train : sorted) {
             seenTrains.add(train.id);
+            if (isStellwerkControlled(train.id)) {
+                clearManagedAssignmentIfNeeded(train.id);
+                continue;
+            }
             syncHubMetadataFromSchedule(train);
             Optional<DerivedLineSpec> optionalSpec = deriveLineSpec(train);
             if (optionalSpec.isEmpty()) {
@@ -110,6 +121,12 @@ public class ScheduleLineSyncService {
         }
 
         managedAssignments.keySet().removeIf(trainId -> !seenTrains.contains(trainId));
+    }
+
+    private boolean isStellwerkControlled(UUID trainId) {
+        return trainId != null
+            && stellwerkControlModeService != null
+            && stellwerkControlModeService.isStellwerkEnabled(trainId);
     }
 
     private boolean isIdleAtDepot(Train train) {

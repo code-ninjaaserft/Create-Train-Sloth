@@ -10,9 +10,9 @@ public class StellwerkControlModeService {
 
     public boolean isStellwerkEnabled(UUID trainId) {
         if (trainId == null) {
-            return true;
+            return false;
         }
-        return stellwerkEnabledByTrain.getOrDefault(trainId, true);
+        return stellwerkEnabledByTrain.getOrDefault(trainId, false);
     }
 
     public void setStellwerkEnabled(UUID trainId, boolean enabled) {
